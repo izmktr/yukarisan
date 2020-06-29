@@ -481,6 +481,7 @@ class CranMember():
         self.notice = None
         self.mention = ''
         self.gacha = 0
+        self.attackmessage = None
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat):
         self.history.append(
@@ -594,7 +595,7 @@ class CranMember():
 
     def Serialize(self):
         ret = {}
-        ignore = ['attacktime']
+        ignore = ['attacktime', 'attackmessage']
 
         for key, value in self.__dict__.items():
             if not key in ignore:
@@ -712,6 +713,7 @@ class Cran():
         self.lap = {0 : 0.0}
         self.defeatlist = []
 
+        self.guild = None
         self.inputchannel = None
         self.outputchannel = None
 
@@ -723,6 +725,10 @@ class Cran():
         member.name = author.display_name
         member.mention = author.mention
         return member
+
+    def IsInput(self, channel_id):
+        if self.inputchannel is None: return False
+        return self.inputchannel.id == channel_id
 
     def FindMember(self, name) -> Optional[CranMember]:
         for member in self.members.values():
@@ -787,18 +793,17 @@ class Cran():
 
         await message.add_reaction(mark)
 
-    async def MemberRefresh(self, message):
+    async def MemberRefresh(self):
         mes = ''
         mlist = []
         deletemember = []
 
-        for member in message.guild.members:
+        for member in self.guild.members:
             if not member.bot:
                 mlist.append(member.id)
                 if self.members.get(member.id) is None:
                     self.GetMember(member)
                     mes += member.name + "を追加しました\n"
-
 
         for id, member in self.members.items():
             if (id not in mlist):
@@ -808,7 +813,8 @@ class Cran():
         for id in deletemember:
             del self.members[id]
 
-        await message.channel.send(mes)
+        if self.inputchannel is not None:
+            await self.inputchannel.send(mes)
 
     def ScoreCalc(self, opt):
         try:
@@ -825,12 +831,21 @@ class Cran():
         member = self.GetMember(message.author)
         mark = u"\u2757"
 
+        if self.inputchannel is None:
+            self.inputchannel = message.channel
+        
+        if self.outputchannel is None:
+            outchannel = [channel for channel in message.guild.channels if channel.name == outputchannel]
+            if 0 < len(outchannel):
+                self.outputchannel = client.get_channel(outchannel[0].id)
+
         if (message.content in CmdAttack):
             member.Attack(self)
 
             if (member.taskkill != 0):
                 await message.add_reaction(mark)
 
+            member.attackmessage = message
             await self.AddReaction(message, member.IsOverkill())
             return True
         
@@ -863,7 +878,7 @@ class Cran():
             return False
 
         if (message.content == 'refresh'):
-            await self.MemberRefresh(message)
+            await self.MemberRefresh()
             return True
 
         if (message.content == 'reset'):
@@ -947,12 +962,12 @@ class Cran():
 
         return False
 
-    def emojiindex(self, reaction):
+    def emojiindex(self, emojistr):
         for idx, emoji in enumerate(self.emojis):
-            if emoji == reaction.emoji:
+            if emoji == emojistr:
                 return idx
         for idx, emoji in enumerate(self.emojisoverkill):
-            if emoji == reaction.emoji:
+            if emoji == emojistr:
                 return idx
         return None
 
@@ -994,7 +1009,7 @@ class Cran():
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
 
     async def on_reaction_add(self, reaction, user):
-        idx = self.emojiindex(reaction)
+        idx = self.emojiindex(reaction.emoji)
         Outlog(ERRFILE, "on_reaction_add %s [%d]" % 
             (reaction.message.author.display_name, reaction.message.author.id ) )
 
@@ -1038,15 +1053,59 @@ class Cran():
         return True
 
     async def on_raw_reaction_add(self, payload):
-        if self.members.get(payload.user_id) is None:
+        member = self.members.get(payload.user_id)
+        if member is None:
+            return False
+
+        if self.inputchannel is None or self.inputchannel.id != payload.channel_id:
+            return False
+
+        if member.attackmessage is None or member.attackmessage.id != payload.message_id:
             return False
 
         Outlog(ERRFILE, "on_raw_reaction_add [%d]" % (payload.user_id))
 
-        return False
+        idx = self.emojiindex(payload.emoji.name)
+        if idx is None:
+            return False
+
+        v = self.AddStamp(payload.message_id)
+        if (v != 1):
+            Outlog(ERRFILE, "self.AddStamp" + " " + v)
+            return False
+
+        if (member.MessageChcck(payload.message_id)):
+            Outlog(ERRFILE, "member.MessageChcck is none")
+            return False
+
+        overkill = member.IsOverkill()
+
+        if (idx == 0):
+            member.Finish(self, payload.message_id)
+            member.notice = None
+        
+        if (1 <= idx and idx <= 8):
+            boss = member.boss
+            if (overkill):
+                member.Finish(self, payload.message_id, True)
+            else:
+                member.Overkill(self, (idx + 1) * 10, payload.message_id)
+
+            member.notice = None
+
+            if (self.bosscount == boss):
+                if cran.inputchannel is not None:
+                    await self.ChangeBoss(cran.inputchannel, 1)
+        
+        if (idx == 9):
+            member.Cancel(self)
+
+        message = member.attackmessage
+        await self.RemoveReaction(message, overkill, message.guild.me)
+        return True
 
     async def on_reaction_remove(self, reaction, user):
-        idx = self.emojiindex(reaction)
+        idx = self.emojiindex(reaction.emoji)
         Outlog(ERRFILE, "on_reaction_remove " + reaction.message.author.display_name)
 
         if (idx is None):
@@ -1083,10 +1142,43 @@ class Cran():
         return False
 
     async def on_raw_reaction_remove(self, payload):
-        if self.members.get(payload.user_id) is None:
+#        member = self.members.get(payload.user_id)
+        member = self.members.get(0)
+        if member is None:
+            return False
+
+        if self.inputchannel is None or self.inputchannel.id != payload.channel_id:
             return False
 
         Outlog(ERRFILE, "on_raw_reaction_remove [%d]" % (payload.user_id))
+
+        idx = self.emojiindex(payload.emoji.name)
+        if idx is None:
+            return False
+
+        v = self.RemoveStamp(payload.message_id)
+        if (v != 0):
+            return False
+
+        if (member.attackmessage is not None and member.attackmessage.id == payload.message_id):
+            if(idx == 9):
+                member.Attack(self, False)
+                await self.AddReaction(member.attackmessage, member.IsOverkill())
+                return True
+
+            data = member.Revert(payload.message_id)
+            if (data is not None):
+                member.Attack(self, False)
+                if (data['defeat']):
+                    if (data['bosscount'] + 1 == self.bosscount):
+                        await self.ChangeBoss(self.inputchannel, -1)
+                    await self.inputchannel.send('ボスが食い違う場合は手動で調整してください\n「prevboss」で前のボス、「nextboss」で次のボスに設定します')
+                
+                await self.AddReaction(member.attackmessage, member.IsOverkill())
+
+                return True
+            else:
+                await self.inputchannel.send('巻き戻しに失敗しました')
 
         return False
                         
@@ -1263,6 +1355,10 @@ def GetCran(guild, message) -> Cran:
     if (g is None):
         g = Cran(message.channel.id)
         cranhash[guild.id] = g
+
+    if g.guild is None:
+        g.guild = guild
+
     return g
 
 @tasks.loop(seconds=60)
@@ -1293,27 +1389,28 @@ async def loop():
 
             cran.Reset()
             if resetflag:
-                channel = client.get_channel(cran.channelid)
-                await channel.send(message)  
-                await Output(channel.guild, outputchannel, cran, cran.Status())
+                if cran.inputchannel is not None:
+                    await cran.inputchannel.send(message)
+                    await Output(cran, cran.Status())
             else:
                 cran.lastmessage = None
 
     if nowtime == '23:59':
         for cran in cranhash.values():
             if (nowdate == BATTLEEND):
-                message = 'クランバトル終了です。お疲れさまでした。'
-                channel = client.get_channel(cran.channelid)
-                await channel.send(message)
-
+                if cran.inputchannel is not None:
+                    message = 'クランバトル終了です。お疲れさまでした。'
+                    await cran.inputchannel.send(message)
+    
     shtime = now + datetime.timedelta(minutes = -15)
     for cran in cranhash.values():
         for member in cran.members.values():
             if (member.attacktime is not None and member.attacktime < shtime):
                 member.attacktime = None
-                message = '%s 凸結果の報告をお願いします' % member.mention
-                channel = client.get_channel(cran.channelid)
-                await channel.send(message)  
+
+                if cran.inputchannel is not None:
+                    message = '%s 凸結果の報告をお願いします' % member.mention
+                    await cran.inputchannel.send(message)
 
 
 def IsCranBattle():
@@ -1346,7 +1443,7 @@ async def on_message(message):
 
     if (result):
         cran.Save(cran, message.guild.id)
-        await Output(message.guild, outputchannel, cran, cran.Status())
+        await Output(cran, cran.Status())
 
 @client.event
 async def on_message_delete(message):
@@ -1362,7 +1459,7 @@ async def on_message_delete(message):
 
     if (result):
         cran.Save(cran, message.guild.id)
-        await Output(message.guild, outputchannel, cran, cran.Status())
+        await Output(cran, cran.Status())
 
 @client.event
 async def on_reaction_add(reaction, user):
@@ -1378,23 +1475,24 @@ async def on_reaction_add(reaction, user):
     if (reaction.message.author != user):
         Outlog(ERRFILE, "event: on_reaction_add " + reaction.message.author.name)
         return
+    return
 
     cran = GetCran(reaction.message.guild, reaction.message)
     result = await cran.on_reaction_add(reaction, user)
 
     if (result):
         cran.Save(cran, reaction.message.guild.id)
-        await Output(reaction.message.guild, outputchannel, cran, cran.Status())
+        await Output(cran, cran.Status())
 
 @client.event
 async def on_raw_reaction_add(payload):
-
     cran = cranhash.get(payload.guild_id)
 
     if cran is not None:
         result = await cran.on_raw_reaction_add(payload)
         if result:
             cran.Save(cran, payload.guild_id)
+            await Output(cran, cran.Status())
 
 @client.event
 async def on_reaction_remove(reaction, user):
@@ -1414,17 +1512,19 @@ async def on_reaction_remove(reaction, user):
 
     if (result):
         cran.Save(cran, reaction.message.guild.id)
-        await Output(reaction.message.guild, outputchannel, cran, cran.Status())
+        await Output(cran, cran.Status())
 
 @client.event
 async def on_raw_reaction_remove(payload):
 
     cran = cranhash.get(payload.guild_id)
 
-    if cran is not None:
+    if cran is not None and cran.IsInput(payload.channel_id):
+
         result = await cran.on_raw_reaction_remove(payload)
         if result:
             cran.Save(cran, payload.guild_id)
+            await Output(cran, cran.Status())
 
 @client.event
 async def on_member_remove(member):
@@ -1435,16 +1535,16 @@ async def on_member_remove(member):
     if (member is not None):
         del cran.members[id]
         cran.Save(cran, member.guild.id)
-        await Output(member.guild, outputchannel, cran, cran.Status())
+        await Output(cran, cran.Status())
 
-async def Output(guild, channelname, cran, message):
-    if (cran.lastmessage is not None):
-        await cran.lastmessage.delete()
-        cran.lastmessage = None
+async def Output(cran, message):
+    if cran.outputchannel is not None:
+        if (cran.lastmessage is not None):
+            await cran.lastmessage.delete()
+            cran.lastmessage = None
 
-    outchannel = [channel for channel in guild.channels if channel.name == channelname][0]
-    channel = client.get_channel(outchannel.id)
-    cran.lastmessage = await channel.send(message)
+        if cran.outputchannel is not None:
+            cran.lastmessage = await cran.outputchannel.send(message)
 
 def Outlog(filename, data):
     datetime_format = datetime.datetime.now()
