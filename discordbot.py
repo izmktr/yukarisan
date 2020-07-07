@@ -948,7 +948,10 @@ class Cran():
         return False
 
     async def on_raw_message_delete(self, payload):
-        member = self.members.get(payload.user_id)
+        if payload.cached_message is None:
+            return False
+
+        member = self.members.get(payload.cached_message.author.id)
         if member is None: return False
 
         if member.Revert() is not None:
