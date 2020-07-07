@@ -1093,8 +1093,8 @@ class Cran():
             member.notice = None
 
             if (self.bosscount == boss):
-                if cran.inputchannel is not None:
-                    await self.ChangeBoss(cran.inputchannel, 1)
+                if self.inputchannel is not None:
+                    await self.ChangeBoss(self.inputchannel, 1)
         
         if (idx == 9):
             member.Cancel(self)
