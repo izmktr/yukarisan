@@ -831,8 +831,7 @@ class Cran():
         member = self.GetMember(message.author)
         mark = u"\u2757"
 
-        if self.inputchannel is None:
-            self.inputchannel = message.channel
+        self.inputchannel = message.channel
         
         if self.outputchannel is None:
             outchannel = [channel for channel in message.guild.channels if channel.name == outputchannel]
