@@ -947,18 +947,17 @@ class Cran():
 
         return False
 
-    async def on_message_delete(self, message):
-        member = self.GetMember(message.author)
+    async def on_raw_message_delete(self, payload):
+        member = self.members.get(payload.user_id)
+        if member is None: return False
 
-        if (message.content in CmdAttack):
-            member.Revert(message.id)
+        if member.Revert() is not None:
             member.Cancel(self)
             return True
 
-        if (message.content in CmdTaskkill):
+        if member.taskkill == payload.message_id:
             member.taskkill = 0
             return True
-        
 
         return False
 
@@ -1446,43 +1445,15 @@ async def on_message(message):
         await Output(cran, cran.Status())
 
 @client.event
-async def on_message_delete(message):
-    # メッセージ送信者がBotだった場合は無視する
-    if message.author.bot:
-        return
-    if message.channel.name != inputchannel:
-        return
+async def on_raw_message_delete(payload):
+    cran = cranhash.get(payload.guild_id)
 
-    cran = GetCran(message.guild, message)
+    if cran is not None and cran.IsInput(payload.channel_id):
 
-    result = await cran.on_message_delete(message)
-
-    if (result):
-        cran.Save(cran, message.guild.id)
-        await Output(cran, cran.Status())
-
-@client.event
-async def on_reaction_add(reaction, user):
-    # メッセージ送信者がBotだった場合は無視する
-
-    if reaction.message.author.bot:
-        return
-    if user.bot:
-        return
-    if reaction.message.channel.name != inputchannel:
-        return
-
-    if (reaction.message.author != user):
-        Outlog(ERRFILE, "event: on_reaction_add " + reaction.message.author.name)
-        return
-    return
-
-    cran = GetCran(reaction.message.guild, reaction.message)
-    result = await cran.on_reaction_add(reaction, user)
-
-    if (result):
-        cran.Save(cran, reaction.message.guild.id)
-        await Output(cran, cran.Status())
+        result = await cran.on_raw_message_delete(payload)
+        if result:
+            cran.Save(cran, payload.guild_id)
+            await Output(cran, cran.Status())
 
 @client.event
 async def on_raw_reaction_add(payload):
@@ -1493,26 +1464,6 @@ async def on_raw_reaction_add(payload):
         if result:
             cran.Save(cran, payload.guild_id)
             await Output(cran, cran.Status())
-
-@client.event
-async def on_reaction_remove(reaction, user):
-    if reaction.message.author.bot:
-        return
-    if user.bot:
-        return
-    if reaction.message.channel.name != inputchannel:
-        return
-
-    if (reaction.message.author != user):
-        Outlog(ERRFILE, "event: on_reaction_remove " + reaction.message.author.name)
-        return
-
-    cran = GetCran(reaction.message.guild, reaction.message)
-    result = await cran.on_reaction_remove(reaction, user)
-
-    if (result):
-        cran.Save(cran, reaction.message.guild.id)
-        await Output(cran, cran.Status())
 
 @client.event
 async def on_raw_reaction_remove(payload):
@@ -1536,6 +1487,14 @@ async def on_member_remove(member):
         del cran.members[id]
         cran.Save(cran, member.guild.id)
         await Output(cran, cran.Status())
+
+@client.event
+async def on_guild_remove(guild):
+    global cranhash
+
+    if guild.id in cranhash:
+        del cranhash[guild.id]
+        os.remove('crandata/%d.json' % (guild.id))
 
 async def Output(cran, message):
     if cran.outputchannel is not None:
