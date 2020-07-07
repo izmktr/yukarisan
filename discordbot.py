@@ -31,11 +31,11 @@ BossHpData = [
 ]
 
 GachaLotData = [
-    [0.7, 0.0, 1.8, 10, 100], # 通常
-    [0.7, 0.0, 1.8, 10, 100], # 限定
-    [0.7, 0.0, 1.8, 10, 100], # プライズ
-    [1.4, 0.0, 3.6, 10, 100], # 通常(2倍)
-    [0.7, 0.9, 3.4, 10, 100], # プリフェス
+    [0.7, 0.0, 1.8, 18, 100], # 通常
+    [0.7, 0.0, 1.8, 18, 100], # 限定
+    [0.7, 0.0, 1.8, 18, 100], # プライズ
+    [1.4, 0.0, 3.6, 18, 100], # 通常(2倍)
+    [0.7, 0.9, 3.4, 18, 100], # プリフェス
 ]
 
 PrizeGacha = False
@@ -187,6 +187,7 @@ class Gacha():
         s1name = ['レイ','ヨリ','ヒヨリ','リマ','ユカリ','クルミ','ミソギ','スズメ','アユミ','アオイ']
         global GachaData
 
+        GachaData = []
         for n in s3name:
             GachaData.append(GachaSchedule('2000/01/01 00:00:00', '3', n))
 
@@ -199,7 +200,8 @@ class Gacha():
         for n in pname:
             GachaData.append(GachaSchedule('2000/01/01 00:00:00', 'f', n))
 
-        GachaData.append(GachaSchedule('2020/06/24 12:00:00', 'l', 'クリスティーナ(クリスマス)'))
+        GachaData.append(GachaSchedule('2020/06/24 12:00:00', 'p', 'クリスティーナ(クリスマス)'))
+        GachaData.append(GachaSchedule('2020/06/30 12:00:00', 'f', 'ユイ(プリンセス)'))
 
         GlobalStrage.Save()
 
@@ -330,10 +332,11 @@ class Gacha():
 
             pickup = m
             n = self.typetoindex(m.gachatype)
-            if 0 <= n:
+            if 0 < n:
                 self.gachabox[n].namelist.append(m.name)
 
         self.PickUpDelete(pickup.name)
+        self.gachabox[0].namelist.append(pickup.name)
         self.Decorate()
 
         lot = GachaLotData[0]
@@ -352,10 +355,35 @@ class Gacha():
 
         return self.gachabox
 
+    @staticmethod
+    def NameListToString(namelist):
+        if type(namelist) is str: 
+            return namelist
+        if type(namelist) is list:
+            return ','.join(namelist)
+        return ''
+
     def ToString(self):
+        self.GetBoxData()
+
         message = ''
+        message += '%s %s\n' % (self.gachatype, GachaData[-1].startdate)
+
         for rate in self.gachabox:
-            message += '%f %d %s\n' % (rate.rate, rate.star, rate.namelist.join(' '))
+            message += '%f %d %s len:%d\n' % (rate.rate, rate.star, rate.namelist[-1], len(rate.namelist) )
+
+        return message
+
+    @staticmethod
+    def GachaScheduleData():
+        message = ''
+        num = 0
+        for m in reversed(GachaData):
+            if 5 <= num or m.startdate <= '2000/01/01 00:00:00':
+                break
+            message +=  '%d: %s %s %s\n' % (num + 1, m.gachatype, m.startdate, Gacha.NameListToString(m.name) )
+            num += 1
+        
         return message
 
     @staticmethod
@@ -824,8 +852,17 @@ class Cran():
         except ValueError:
             return None
     
-    async def AddGacha(self, opt, message):
-        await message.channel.send('エラーです')
+    async def GachaAdd(self, opt, channel):
+        gtype = opt[0]
+        date = opt[1:20]
+        name = opt[20:]
+        mes = '%s [%s] [%s]' % (gtype, date, name)
+
+        global GachaData
+        GachaData.append(GachaSchedule(date, gtype, name))
+        GlobalStrage.Save()
+
+        await channel.send(mes)
 
     async def on_message(self, message):
         member = self.GetMember(message.author)
@@ -915,13 +952,22 @@ class Cran():
                 await member.Gacha(message)
                 return False
 
-        opt = Command(message.content, 'addgacha')
+        opt = Command(message.content, 'gachaadd')
         if (opt is not None):
-            await self.AddGacha(opt, message)
+            await self.GachaAdd(opt, message.channel)
+            return False
+
+        opt = Command(message.content, 'gachalist')
+        if (opt is not None):
+            await message.channel.send(Gacha.GachaScheduleData())
             return False
 
         if (message.content in ['gachasave']):
             gacha.GachaSave()
+            return False
+
+        if (message.content in ['gdata']):
+            await message.channel.send(gacha.ToString())
             return False
 
         opt = Command(message.content, 'delete')
