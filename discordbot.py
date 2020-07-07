@@ -954,7 +954,7 @@ class Cran():
         member = self.members.get(payload.cached_message.author.id)
         if member is None: return False
 
-        if member.Revert() is not None:
+        if member.Revert(payload.message_id) is not None:
             member.Cancel(self)
             return True
 
@@ -1144,8 +1144,7 @@ class Cran():
         return False
 
     async def on_raw_reaction_remove(self, payload):
-#        member = self.members.get(payload.user_id)
-        member = self.members.get(0)
+        member = self.members.get(payload.user_id)
         if member is None:
             return False
 
