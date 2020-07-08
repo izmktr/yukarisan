@@ -1381,7 +1381,7 @@ class Cran():
             return cran
 
 # 接続に必要なオブジェクトを生成
-client = discord.Client(max_messages = 100000)
+client = discord.Client()
 
 cranhash = {}
 
