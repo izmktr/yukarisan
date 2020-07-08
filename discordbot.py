@@ -67,6 +67,7 @@ import os
 import codecs
 import random
 from typing import List, Dict, Any, Optional
+from io import StringIO
 #from PIL import Image
 #import numpy as np
 
@@ -950,6 +951,10 @@ class Cran():
             else:
                 await member.Gacha(message)
                 return False
+        
+        if message.content in ['defeatlog']:
+            await self.DefeatLog(message.channel)
+            return False
 
         opt = Command(message.content, 'gachaadd')
         if (opt is not None):
@@ -1054,6 +1059,14 @@ class Cran():
             notice = self.CreateNotice(self.BossIndex())
             if (notice is not None):
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
+
+    async def DefeatLog(self, channel):
+        text = ''
+        for n in self.defeatlist:
+            text += n + '\n'
+
+        with StringIO(text) as bs:
+            await channel.send(file=discord.File(bs, 'defeatlog.txt'))
 
     async def on_reaction_add(self, reaction, user):
         idx = self.emojiindex(reaction.emoji)
