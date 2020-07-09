@@ -1568,6 +1568,8 @@ async def on_message(message):
     # メッセージ送信者がBotだった場合は無視する
     if message.author.bot:
         return
+    if message.channel.type != discord.ChannelType.text:
+        return
     if message.channel.name != inputchannel:
         return
 
