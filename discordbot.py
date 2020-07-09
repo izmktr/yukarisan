@@ -306,14 +306,21 @@ class Gacha():
         for i in range(len(self.gachabox[1].namelist)):
             self.gachabox[1].namelist[i] += ' PriFes!'
 
+    @staticmethod
+    def AppendList(namelist, name):
+        if type(name) is list:
+            namelist.extend(name)
+        else:
+            namelist.append(name)
+
     def GetBoxData(self) -> List[GachaRate]:
         datetime_format = datetime.datetime.now()
         datestr = datetime_format.strftime("%Y/%m/%d %H:%M:%S")  # 2017/11/12 09:55:28
 
-        if self.limitdate == None and GachaData[-1].startdate <= datestr:
-            return self.gachabox
-
-        if datestr < self.limitdate:
+        if self.limitdate == None:
+            if GachaData[-1].startdate <= datestr:
+                return self.gachabox
+        elif datestr < self.limitdate:
             return self.gachabox
 
         self.limitdate = None
@@ -334,10 +341,10 @@ class Gacha():
             pickup = m
             n = self.typetoindex(m.gachatype)
             if 0 < n:
-                self.gachabox[n].namelist.append(m.name)
+                self.AppendList(self.gachabox[n].namelist, m.name)
 
         self.PickUpDelete(pickup.name)
-        self.gachabox[0].namelist.append(pickup.name)
+        self.AppendList(self.gachabox[0].namelist, pickup.name)
         self.Decorate()
 
         lot = GachaLotData[0]
@@ -649,7 +656,7 @@ class CranMember():
     def dayfinish(self):
         return self.SortieCount() == MAX_SORITE
 
-    async def Gacha(self, message):
+    async def Gacha(self, channel):
         self.gacha += 1
         result = []
         box = gacha.GetBoxData()
@@ -666,7 +673,7 @@ class CranMember():
             if (0 < rare and random.random() < 0.5):
                 mes = 'かんぱ～い！ ' + u"\U0001F37B"
 
-            post = await message.channel.send(mes)
+            post = await channel.send(mes)
             await asyncio.sleep(5)
             await post.delete()
 
@@ -675,11 +682,11 @@ class CranMember():
                 mes += staremoji[p.star]
                 if i == 4: mes += '\n'
             
-            post = await message.channel.send(mes)
+            post = await channel.send(mes)
             await asyncio.sleep(5)
             await post.delete()
-        
-        await message.channel.send('\n'.join(['★%d %s' % (p.star, p.name) for p in result]))
+
+        mes = '\n'.join(['★%d %s' % (p.star, p.name) for p in result])
 
         if (gacha.prize):
             resultprize : List[PrizeRate] = []
@@ -693,12 +700,31 @@ class CranMember():
                 totalprize.stone += pl.stone
                 totalprize.heart += pl.heart
 
-            str = ' '.join([item.Name() for item in resultprize]) + '\n'
-            str += 'メモピ%d個 ハート%d個 秘石%d個' % (totalprize.memorial, totalprize.heart, totalprize.stone)
+            mes += '\n' + ' '.join([item.Name() for item in resultprize]) + '\n'
+            mes += 'メモピ%d個 ハート%d個 秘石%d個' % (totalprize.memorial, totalprize.heart, totalprize.stone)
 
-            await message.channel.send(str)
+        await channel.send(mes)
 
-    
+    async def Gacha10000(self, channel):
+        dic = {}
+        box = gacha.GetBoxData()
+        for _i in range(10000):
+            princess = Gacha.LotteryPrincess(box, 1)
+
+            if 3 <=princess.star:
+                name = princess.name if '!' in princess.name else 'すり抜け星3'
+
+                if name in dic:
+                    dic[name] += 1
+                else:
+                    dic[name] = 1
+        
+        mes = ''
+        for name, count in dic.items():
+            mes += '%s:%d\n' % (name, count)
+        
+        await channel.send(mes)
+   
 class Cran():
     numbermarks = [
         "\N{DIGIT ZERO}\N{COMBINING ENCLOSING KEYCAP}",
@@ -859,11 +885,28 @@ class Cran():
         name = opt[20:]
         mes = '%s [%s] [%s]' % (gtype, date, name)
 
+        namearray = name.split(',')
+        if 2 <= len(namearray):
+            name = namearray
+
         global GachaData
         GachaData.append(GachaSchedule(date, gtype, name))
         GlobalStrage.Save()
 
         await channel.send(mes)
+
+    async def GachaDelete(self, opt, channel):
+        global GachaData
+        try:
+            gindex = int(opt)
+            if 0 < gindex and gindex <= len(GachaData):
+                GachaData.pop(-gindex)
+                GlobalStrage.Save()
+                await channel.send(Gacha.GachaScheduleData())
+                return
+        except ValueError:
+            pass
+        await channel.send('数値変換に失敗しました')
 
     async def on_message(self, message):
         member = self.GetMember(message.author)
@@ -900,10 +943,6 @@ class Cran():
             await self.ChangeBoss(message.channel, 1)
             return True
 
-        if (message.content == 'cranreset'):
-            self.Reset()
-            return True
-
         opt = Command(message.content, ['memo', 'メモ'])
         if (opt is not None):
             member.SetMemo(opt)
@@ -922,7 +961,11 @@ class Cran():
             member.Reset()
             return True
 
-        if (message.content == 'fullreset'):
+        if (message.content == 'daylyreset'):
+            self.Reset()
+            return True
+
+        if (message.content == 'monthlyreset'):
             self.FullReset()
             return True
 
@@ -949,9 +992,16 @@ class Cran():
             if (IsCranBattle()):
                 return False
             else:
-                await member.Gacha(message)
+                await member.Gacha(message.channel)
                 return False
-        
+
+        if (message.content in ['gacha10000']):
+            if (IsCranBattle()):
+                return False
+            else:
+                await member.Gacha10000(message.channel)
+                return False
+
         if message.content in ['defeatlog']:
             await self.DefeatLog(message.channel)
             return False
@@ -959,6 +1009,11 @@ class Cran():
         opt = Command(message.content, 'gachaadd')
         if (opt is not None):
             await self.GachaAdd(opt, message.channel)
+            return False
+
+        opt = Command(message.content, 'gachadelete')
+        if (opt is not None):
+            await self.GachaDelete(opt, message.channel)
             return False
 
         opt = Command(message.content, 'gachalist')
