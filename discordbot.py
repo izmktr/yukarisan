@@ -64,6 +64,7 @@ import datetime
 import json
 import glob
 import os
+import re
 import codecs
 import random
 from typing import List, Dict, Any, Optional
@@ -383,13 +384,23 @@ class Gacha():
         return message
 
     @staticmethod
+    def GachaType(g):
+        if g == '1' : return '恒常星1'
+        if g == '2' : return '恒常星2'
+        if g == '3' : return '恒常星3'
+        if g == 'l' : return '限定'
+        if g == 'p' : return 'プライズ'
+        if g == 'f' : return 'プリフェス'
+        return 'Unknown'
+
+    @staticmethod
     def GachaScheduleData():
         message = ''
         num = 0
         for m in reversed(GachaData):
-            if 5 <= num or m.startdate <= '2000/01/01 00:00:00':
+            if 9 <= num or m.startdate <= '2000/01/01 00:00:00':
                 break
-            message +=  '%d: %s %s %s\n' % (num + 1, m.gachatype, m.startdate, Gacha.NameListToString(m.name) )
+            message +=  '%d: %s [%s] [%s]\n' % (num + 1, m.startdate, Gacha.GachaType(m.gachatype), Gacha.NameListToString(m.name) )
             num += 1
         
         return message
@@ -884,6 +895,14 @@ class Cran():
         date = opt[1:20]
         name = opt[20:]
         mes = '%s [%s] [%s]' % (gtype, date, name)
+
+        if gtype not in '3lpf':
+            await channel.send(mes + ' ガチャタイプが不正です')
+            return
+
+        if not re.match(date, '[0-9]{4}/(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]'):
+            await channel.send(mes + ' 日付が不正です')
+            return
 
         namearray = name.split(',')
         if 2 <= len(namearray):
