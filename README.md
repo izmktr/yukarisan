@@ -67,24 +67,21 @@ crandata/ 以下のファイルから自分のサーバを探し、admin=Trueと
 
 - gachaadd  
 ガチャデータを追加する  
-usage)gachaadd[gachatype][startdate][name]
-gachatype  
+usage)gachaadd[gachatype][startdate][name]  
+gachatype  以下の1文字を入れる  
 -- 1,2,3 恒久的に出現するレアリティ  
 -- f プリフェス限定  
 -- l 限定(追加されない)  
 -- d 2倍(星3が2倍、ピックアップが1.4%)  
 -- p プライズガチャ  
-startdate  
-ガチャが始まる期間  
-name  
-ガチャに追加されるキャラ(,で区切って複数可能)  
+startdate  ガチャが始まる期間  
+name  ガチャに追加されるキャラ(,で区切って複数可能)  
 ex)gachaaddl2020/07/10 12:00:00マコト(サマー),マホ(サマー)  
 
 - gachadelete  
 gachaaddで追加したキャラの削除  
 usage)gachadelete[index]  
-index  
-gachalist のindexを入力  
+index  gachalist のindexを入力  
 ex)gachadelete1  
 
 - term  
