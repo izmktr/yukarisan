@@ -710,6 +710,8 @@ class Cran():
         self.inputchannel = None
         self.outputchannel = None
 
+        self.admin = False
+
     def GetMember(self, author) -> CranMember:
         member = self.members.get(author.id)
         if (member is None):
@@ -929,16 +931,6 @@ class Cran():
                     await message.channel.send('メンバーがいません')
             return False
 
-        opt = Command(message.content, 'bossname')
-        if (opt is not None):
-            await self.BossName(opt, message.channel)
-            return True
-
-        opt = Command(message.content, 'term')
-        if (opt is not None):
-            await self.BattleTeam(opt, message.channel)
-            return True
-
         if (message.content in ['gacha', 'ガチャ']):
             if (IsCranBattle()):
                 return False
@@ -957,23 +949,9 @@ class Cran():
             await self.DefeatLog(message.channel)
             return False
 
-        opt = Command(message.content, 'gachaadd')
-        if (opt is not None):
-            await self.GachaAdd(opt, message.channel)
-            return False
-
-        opt = Command(message.content, 'gachadelete')
-        if (opt is not None):
-            await self.GachaDelete(opt, message.channel)
-            return False
-
         opt = Command(message.content, 'gachalist')
         if (opt is not None):
             await message.channel.send(Gacha.GachaScheduleData())
-            return False
-
-        if (message.content in ['gachasave']):
-            gacha.GachaSave()
             return False
 
         if (message.content in ['gdata']):
@@ -999,6 +977,27 @@ class Cran():
                 return True
             else:
                 await message.channel.send('計算できませんでした')
+                return False
+
+        if self.admin:
+            opt = Command(message.content, 'bossname')
+            if (opt is not None):
+                await self.BossName(opt, message.channel)
+                return True
+
+            opt = Command(message.content, 'term')
+            if (opt is not None):
+                await self.BattleTeam(opt, message.channel)
+                return True
+
+            opt = Command(message.content, 'gachaadd')
+            if (opt is not None):
+                await self.GachaAdd(opt, message.channel)
+                return False
+
+            opt = Command(message.content, 'gachadelete')
+            if (opt is not None):
+                await self.GachaDelete(opt, message.channel)
                 return False
 
         return False
@@ -1402,6 +1401,7 @@ class Cran():
             'beforesortie' : cran.beforesortie,
             'lap' : cran.lap,
             'defeatlist' : cran.defeatlist,
+            'admin' : cran.admin,
         }
 
         for mid, member in cran.members.items():
@@ -1418,15 +1418,18 @@ class Cran():
             cran = Cran(mdic['channelid'])
             cran.bosscount = mdic['bosscount']
 
-            if ('beforesortie' in mdic):
+            if 'beforesortie' in mdic:
                 cran.beforesortie = mdic['beforesortie']
             
-            if ('defeatlist' in mdic):
+            if 'defeatlist' in mdic:
                 cran.defeatlist = mdic['defeatlist']
 
-            if ('lap' in mdic):
+            if 'lap' in mdic:
                 for key, value  in mdic['lap'].items():
                     cran.lap[int(float(key))] = value
+
+            if 'admin' in mdic:
+                cran.admin = mdic['admin']
 
             for mid, dicmember in mdic['members'].items():
                 member = CranMember()
