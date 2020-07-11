@@ -38,8 +38,6 @@ GachaLotData = [
     [0.7, 0.9, 3.4, 18, 100], # プリフェス
 ]
 
-PrizeGacha = False
-
 ERRFILE = 'error.log'
 SETTINGFILE = 'setting.json'
 
@@ -133,6 +131,7 @@ class GlobalStrage:
         global GachaData
         global BossName
         global BATTLESTART
+        global BATTLEPRESTART
         global BATTLEEND
 
         with open(SETTINGFILE) as a:
@@ -150,6 +149,8 @@ class GlobalStrage:
 
             if ('BATTLESTART' in mdic):
                 BATTLESTART = mdic['BATTLESTART']
+                start = datetime.datetime.strptime(BATTLESTART, '%m/%d')
+                BATTLEPRESTART = (start + datetime.timedelta(days = -1)).strftime('%m/%d')
 
             if ('BATTLEEND' in mdic):
                 BATTLEEND = mdic['BATTLEEND']
@@ -206,80 +207,6 @@ class Gacha():
         GachaData.append(GachaSchedule('2020/06/30 12:00:00', 'f', 'ユイ(プリンセス)'))
 
         GlobalStrage.Save()
-
-    def GetBox(self) -> List[GachaRate]:
-        global PrizeGacha
-
-        datetime_format = datetime.datetime.now()
-        datestr = datetime_format.strftime("%Y/%m/%d %H:%M:%S")  # 2017/11/12 09:55:28
-
-        gachabox : List[GachaRate] = [
-            GachaRate(1.8, 3, ['マコト','キョウカ','トモ','ルナ','カスミ','ジュン','アリサ','アン','クウカ(オーエド)','ニノン(オーエド)','ミミ(ハロウィン)','ルカ','クロエ','イリヤ','アンナ','グレア','カヤ','イリヤ(クリスマス)','カスミ(マジカル)','ノゾミ','マホ','シズル','サレン','ジータ','ニノン','リノ','アキノ','モニカ','イオ','ハツネ','アオイ(編入生)','ユニ','チエル','リン(レンジャー)','マヒル(レンジャー)','リノ(ワンダー)']),
-            GachaRate(18, 2, ['カオリ','ナナカ','エリコ','シオリ','ミミ','タマキ','マツリ','スズナ','ミヤコ','クウカ','アカリ','ミツキ','ツムギ','ミサト','アヤネ','シノブ','チカ','ミフユ','リン','ユキ','マヒル']),
-            GachaRate(100, 1, ['レイ','ヨリ','ヒヨリ','リマ','ユカリ','クルミ','ミソギ','スズメ','アユミ','アオイ']),
-        ]
-
-        if (datestr < '2020/04/24 12:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['チエル Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/04/30 12:00:00'):
-            PrizeGacha = True
-            return [
-                GachaRate(0.7, 3, ['キョウカ(ハロウィン) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/05/10 12:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['リン(レンジャー) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/05/15 12:00:00'):
-            PrizeGacha = True
-            return [
-                GachaRate(0.7, 3, ['クウカ(オーエド) Pickup!','ニノン(オーエド) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/05/31 12:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['マヒル(レンジャー) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/06/03 19:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['コッコロ(プリンセス) Pickup!']),
-                GachaRate(0.9, 3, ['ペコリーヌ(プリンセス) PriFes!',
-                'クリスティーナ PriFes!', 'ムイミ PriFes!', 'ネネカ PriFes!']),
-                GachaRate(3.4, 3, gachabox[0].namelist),
-                gachabox[1],
-                gachabox[2]
-                ] 
-
-        if (datestr < '2020/06/10 12:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['リノ(ワンダー) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/06/17 15:00:00'):
-            PrizeGacha = True
-            return [
-                GachaRate(0.7, 3, ['スズナ(サマー) Pickup!','サレン(サマー) Pickup!']),
-                ] + gachabox
-
-        if (datestr < '2020/06/30 12:00:00'):
-            PrizeGacha = False
-            return [
-                GachaRate(0.7, 3, ['イノリ Pickup!']),
-                ] + gachabox
-
-        PrizeGacha = False
-        return gachabox
 
     @staticmethod
     def typetoindex(c) -> int:
@@ -699,7 +626,7 @@ class CranMember():
 
         mes = '\n'.join(['★%d %s' % (p.star, p.name) for p in result])
 
-        if (gacha.prize):
+        if gacha.prize:
             resultprize : List[PrizeRate] = []
             for i in range(10):
                 prize = Gacha.LotteryPrize(1 if i < 9 else 2)
@@ -1002,11 +929,14 @@ class Cran():
                     await message.channel.send('メンバーがいません')
             return False
 
-        opt = Command(message.content, 'bn')
+        opt = Command(message.content, 'bossname')
         if (opt is not None):
-            bindex = int(opt[:1]) - 1
-            if (0 <= bindex and bindex < BOSSNUMBER):
-                BossName[bindex] = opt[1:]
+            await self.BossName(opt, message.channel)
+            return True
+
+        opt = Command(message.content, 'term')
+        if (opt is not None):
+            await self.BattleTeam(opt, message.channel)
             return True
 
         if (message.content in ['gacha', 'ガチャ']):
@@ -1135,6 +1065,42 @@ class Cran():
             notice = self.CreateNotice(self.BossIndex())
             if (notice is not None):
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
+    
+    async def BossName(self, opt, channel):
+        namearray = opt.split(',')
+
+        if BOSSNUMBER != len(namearray):
+            await channel.send('usage) bossname boss1,boss2,boss3,boss4,boss5')
+            return
+        
+        BossName = namearray
+        GlobalStrage.Save()
+
+        await channel.send('ボスを更新しました'+','.join(BossName))
+
+    async def BattleTeam(self, opt, channel):
+        team = opt.split(',')
+
+        if len(team) != 2:
+            await channel.send('usage) team 1/20,1/30')
+            return
+
+        global BATTLEPRESTART
+        global BATTLESTART
+        global BATTLEEND
+
+        try:
+            start = datetime.datetime.strptime(team[0], '%m/%d')
+            end = datetime.datetime.strptime(team[1], '%m/%d')
+
+            BATTLEPRESTART = (start + datetime.timedelta(days = -1)).strftime('%m/%d')
+            BATTLESTART = start.strftime('%m/%d')
+            BATTLEEND = end.strftime('%m/%d')
+
+            GlobalStrage.Save()
+            await channel.send('クラバト期間は%s-%sです' % (BATTLESTART, BATTLEEND))
+        except ValueError:
+            await channel.send('日付エラーです')
 
     async def DefeatLog(self, channel):
         text = ''
@@ -1511,6 +1477,7 @@ async def loop():
             if (nowdate == BATTLEPRESTART):
                 message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
                 cran.FullReset()
+                cran.MemberRefresh()
                 resetflag = True
 
             if (nowdate == BATTLESTART):
@@ -1559,8 +1526,8 @@ async def on_ready():
     print('ログインしました')
     Outlog(ERRFILE, "login.")
 
-async def VolatilityMessage(message, mes, time):
-    log = await message.channel.send(mes)
+async def VolatilityMessage(channel, mes, time):
+    log = await channel.send(mes)
     await asyncio.sleep(time)
     await log.delete()
 
