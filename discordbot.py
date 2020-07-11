@@ -210,6 +210,7 @@ class Gacha():
 
     @staticmethod
     def typetoindex(c) -> int:
+        if (c == 'd'): return 0
         if (c == 'l'): return 0
         if (c == 'p'): return 0
         if (c == 'f'): return 1
@@ -316,6 +317,7 @@ class Gacha():
         if g == '2' : return '恒常星2'
         if g == '3' : return '恒常星3'
         if g == 'l' : return '限定'
+        if g == 'd' : return '2倍'
         if g == 'p' : return 'プライズ'
         if g == 'f' : return 'プリフェス'
         return 'Unknown'
@@ -1480,7 +1482,7 @@ async def loop():
             if (nowdate == BATTLEPRESTART):
                 message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
                 cran.FullReset()
-                cran.MemberRefresh()
+                await cran.MemberRefresh()
                 resetflag = True
 
             if (nowdate == BATTLESTART):
