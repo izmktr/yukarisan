@@ -937,6 +937,8 @@ class Cran():
             outchannel = [channel for channel in message.guild.channels if channel.name == outputchannel]
             if 0 < len(outchannel):
                 self.outputchannel = client.get_channel(outchannel[0].id)
+            else:
+                await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
         if (message.content in CmdAttack):
             member.Attack(self)
@@ -1615,12 +1617,14 @@ async def on_raw_reaction_remove(payload):
 
 @client.event
 async def on_member_remove(member):
+    if member.bot: return
+
     cran = cranhash.get(member.guild.id)
     if (cran is None): return
 
     member = cran.members.get(member.id)
     if (member is not None):
-        del cran.members[id]
+        del cran.members[member.id]
         cran.Save(cran, member.guild.id)
         await Output(cran, cran.Status())
 
@@ -1630,7 +1634,10 @@ async def on_guild_remove(guild):
 
     if guild.id in cranhash:
         del cranhash[guild.id]
-        os.remove('crandata/%d.json' % (guild.id))
+        try:
+            os.remove('crandata/%d.json' % (guild.id))
+        except FileNotFoundError:
+            pass
 
 async def Output(cran, message):
     if cran.outputchannel is not None:
@@ -1639,7 +1646,10 @@ async def Output(cran, message):
             cran.lastmessage = None
 
         if cran.outputchannel is not None:
-            cran.lastmessage = await cran.outputchannel.send(message)
+            try:
+                cran.lastmessage = await cran.outputchannel.send(message)
+            except discord.errors.Forbidden:
+                cran.outputchannel = None
 
 def Outlog(filename, data):
     datetime_format = datetime.datetime.now()
