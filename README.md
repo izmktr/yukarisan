@@ -13,7 +13,7 @@ DiscordのBotとして利用します。
 botがスタンプを付けるので、結果に応じて対応するスタンプを押します。  
 
 
-## コマンド一覧
+## 一般コマンド
 
 - 凸/a  
 攻撃宣言、詳しくは別画像参照
@@ -50,6 +50,52 @@ nextbossでボスを進めて、prevbossでボスを戻す
 「score 数値(万)」でそのスコアが何周目のどの敵に該当するかを表示する  
 数値は万単位(下4桁を削る)
 
+- gdata  
+現在のガチャ確率を表示する
+
+- gacha10000  
+10000回ガチャを行う(ガチャデータ検証用)
+
+
+
+## 情報コマンド
+
+## 全体セッティングコマンド
+
+このコマンドはすべてのギルドに影響するコマンドです  
+crandata/ 以下のファイルから自分のサーバを探し、admin=Trueとしたサーバのみ実行できます  
+基本的には、最新のsetting.jsonをGithubからダウンロードすれば使うことはありません  
+
+- gachaadd  
+ガチャデータを追加する  
+usage)gachaadd[gachatype][startdate][name]
+gachatype  
+-- 1,2,3 恒久的に出現するレアリティ
+-- f プリフェス限定
+-- l 限定(追加されない)
+-- d 2倍(星3が2倍、ピックアップが1.4%)
+-- p プライズガチャ
+startdate  
+ガチャが始まる期間  
+name  
+ガチャに追加されるキャラ(,で区切って複数可能)  
+ex)gachaaddl2020/07/10 12:00:00マコト(サマー),マホ(サマー)  
+
+- gachadelete  
+gachaaddで追加したキャラの削除
+usage)gachadelete[index]  
+index  
+gachalist のindexを入力
+ex)gachadelete1
+
+- term  
+クランバトルの期間を設定する  
+usage)term[start m/d],[end m/d]
+ex)term06/25,06/29
+
+- bossname  
+usage)term[boss1],[boss2],[boss3],[boss4],[boss5]
+クランバトルのボスの名前を設定する
 
 ## 導入方法
 
