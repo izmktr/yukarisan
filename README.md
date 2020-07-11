@@ -56,9 +56,8 @@ nextbossでボスを進めて、prevbossでボスを戻す
 - gacha10000  
 10000回ガチャを行う(ガチャデータ検証用)
 
-
-
-## 情報コマンド
+- gachalist  
+ガチャスケジュールの表示
 
 ## 全体セッティングコマンド
 
@@ -70,11 +69,11 @@ crandata/ 以下のファイルから自分のサーバを探し、admin=Trueと
 ガチャデータを追加する  
 usage)gachaadd[gachatype][startdate][name]
 gachatype  
--- 1,2,3 恒久的に出現するレアリティ
--- f プリフェス限定
--- l 限定(追加されない)
--- d 2倍(星3が2倍、ピックアップが1.4%)
--- p プライズガチャ
+-- 1,2,3 恒久的に出現するレアリティ  
+-- f プリフェス限定  
+-- l 限定(追加されない)  
+-- d 2倍(星3が2倍、ピックアップが1.4%)  
+-- p プライズガチャ  
 startdate  
 ガチャが始まる期間  
 name  
@@ -82,20 +81,20 @@ name
 ex)gachaaddl2020/07/10 12:00:00マコト(サマー),マホ(サマー)  
 
 - gachadelete  
-gachaaddで追加したキャラの削除
+gachaaddで追加したキャラの削除  
 usage)gachadelete[index]  
 index  
-gachalist のindexを入力
-ex)gachadelete1
+gachalist のindexを入力  
+ex)gachadelete1  
 
 - term  
 クランバトルの期間を設定する  
-usage)term[start m/d],[end m/d]
-ex)term06/25,06/29
+usage)term[start m/d],[end m/d]  
+ex)term06/25,06/29  
 
 - bossname  
-usage)term[boss1],[boss2],[boss3],[boss4],[boss5]
-クランバトルのボスの名前を設定する
+usage)term[boss1],[boss2],[boss3],[boss4],[boss5]  
+クランバトルのボスの名前を設定する  
 
 ## 導入方法
 
