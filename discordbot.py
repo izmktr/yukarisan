@@ -67,8 +67,12 @@ import codecs
 import random
 from typing import List, Dict, Any, Optional
 from io import StringIO
+from typing import Sequence, TypeVar
+
 #from PIL import Image
 #import numpy as np
+
+T = TypeVar('T') 
 
 BOSSNUMBER = len(BossName)
 
@@ -173,7 +177,7 @@ class GlobalStrage:
 
 class Gacha():
     def __init__(self):
-        self.gachabox = None
+        self.gachabox : List[GachaRate] = []
         self.limitdate = '2000/01/01 00:00:00'
         self.gachatype = '3'
         self.prize = False
@@ -333,9 +337,8 @@ class Gacha():
             num += 1
         
         return message
-
     @staticmethod
-    def Lottery(box, leaststar = 1):
+    def Lottery(box : List[T], leaststar = 1) -> T:
         rndstar = random.random() * 100
         before = None
         for b in box:
@@ -372,9 +375,17 @@ gacha = Gacha()
 
 #クランスコア計算ロジック
 
+class ScoreCalcResult:
+    def __init__(self, lap, level, bindex, hprate, modscore):
+        self.lap = lap
+        self.level = level
+        self.bossindex = bindex
+        self.hprate = hprate
+        self.modscore = modscore
+
 class CranScore:
     @staticmethod
-    def Calc(score):
+    def Calc(score) -> Optional[ScoreCalcResult]:
         total = 0
         level = 0
         while level < len(LevelUpLap):
@@ -395,16 +406,70 @@ class CranScore:
 
             if modscore < totalscore + nowbossscore:
                 hprate = int(100 - (modscore - totalscore) * 100 // nowbossscore)
-
-                return type("ScoreCalcResult", (object,), {
-                    "lap": lap,
-                    "level": level,
-                    "bossindex": bindex,
-                    "hprate" : hprate,
-                    "modscore" : modscore
-                })
+                return ScoreCalcResult(lap, level, bindex, hprate,  modscore)
             totalscore += nowbossscore
             bindex += 1
+
+        return None
+
+#ユカリさん相談
+
+class StringChopper:
+    def __init__(self):
+        self.initialdic :Dict[str, List[str]] = {}
+    
+    def Register(self, name):
+        length = len(name)
+        if length == 0: return
+
+        page = self.initialdic.get(name[0])
+        if page is None:
+            self.initialdic[name[0]] = [name]
+            return
+
+        pagelength = len(page)
+        for i in range(0, pagelength):
+            if name < page[i][0]:
+                page.insert(i, [name])
+                break
+    
+    def Print(self):
+        for value in self.initialdic.values():
+            for name in value:
+                print(name[0])
+    
+    def Serialize(self):
+        result = []
+        for value in self.initialdic.values():
+            for name in value:
+                result.append(name)
+
+        return result
+    
+    def Deserialize(self, datalist):
+        for data in datalist:
+            self.Register(data)
+
+    def Chopper(self, namelist, split = -1):
+        if split == 0 or len(namelist) == 0: return []
+        tmpname = namelist
+
+        page = None
+        while 0 < len(tmpname):
+            page = self.initialdic.get(tmpname[0])
+            if page is not None:
+                break
+            tmpname = tmpname[1:]
+        if len(tmpname) == 0: return None
+
+        for s in page:
+            if tmpname.startswith(s[0]):
+                result = [s[1]]
+                if 1 < split:
+                    a = self.Chopper(tmpname[len(s[0]):], split - 1)
+                    if a is None: continue
+                    result.extend(a)
+                return result
 
         return None
 
@@ -457,7 +522,7 @@ class CranMember():
         self.notice = None
         self.mention = ''
         self.gacha = 0
-        self.attackmessage = None
+        self.attackmessage: discord.Message = None
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat):
         self.history.append(
@@ -708,7 +773,7 @@ class Cran():
         self.lap = {0 : 0.0}
         self.defeatlist = []
 
-        self.guild = None
+        self.guild : discord.Guild = None
         self.inputchannel = None
         self.outputchannel = None
 
@@ -791,6 +856,8 @@ class Cran():
         await message.add_reaction(mark)
 
     async def MemberRefresh(self):
+        if self.guild is None: return
+
         mes = ''
         mlist = []
         deletemember = []
@@ -1440,10 +1507,28 @@ class Cran():
 
             return cran
 
+
+    
+
+class PrivateUser:
+    DefalutHave = []
+
+    def __init__(self, channel):
+        self.channel = channel
+        self.princessdic :Dict[int, int] = {}
+        
+    def IsHave(self, princessid):
+        d = self.princessdic.get(princessid)
+
+        if d is not None:
+            return d
+        
+        return princessid in self.DefalutHave
+
 # 接続に必要なオブジェクトを生成
 client = discord.Client()
 
-cranhash = {}
+cranhash: Dict[int, Cran] = {}
 
 # ギルドデータ読み込み
 files = glob.glob("./crandata/*.json")
@@ -1542,17 +1627,22 @@ async def on_message(message):
     # メッセージ送信者がBotだった場合は無視する
     if message.author.bot:
         return
-    if message.channel.type != discord.ChannelType.text:
-        return
-    if message.channel.name != inputchannel:
+    if message.channel.type == discord.ChannelType.text:
+        if message.channel.name != inputchannel:
+            return
+
+        cran = GetCran(message.guild, message)
+        result = await cran.on_message(message)
+
+        if (result):
+            cran.Save(cran, message.guild.id)
+            await Output(cran, cran.Status())
         return
 
-    cran = GetCran(message.guild, message)
-    result = await cran.on_message(message)
+    if message.channel.type == discord.ChannelType.private:
+        await message.channel.send(message.content)
 
-    if (result):
-        cran.Save(cran, message.guild.id)
-        await Output(cran, cran.Status())
+        return
 
 @client.event
 async def on_raw_message_delete(payload):
@@ -1594,8 +1684,7 @@ async def on_member_remove(member):
     cran = cranhash.get(member.guild.id)
     if (cran is None): return
 
-    member = cran.members.get(member.id)
-    if (member is not None):
+    if member.id in cran.members:
         del cran.members[member.id]
         cran.Save(cran, member.guild.id)
         await Output(cran, cran.Status())
