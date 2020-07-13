@@ -1601,6 +1601,10 @@ async def on_member_remove(member):
         await Output(cran, cran.Status())
 
 @client.event
+async def on_guild_join(guild):
+    Outlog(ERRFILE, "on_guild_join. %s" % guild.name)
+
+@client.event
 async def on_guild_remove(guild):
     global cranhash
 
