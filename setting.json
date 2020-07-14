@@ -387,6 +387,11 @@
                 "\u30de\u30b3\u30c8(\u30b5\u30de\u30fc)",
                 "\u30de\u30db(\u30b5\u30de\u30fc)"
             ]
+        },
+        {
+            "startdate": "2020/07/15 15:00:00",
+            "gachatype": "3",
+            "name": "\u30ca\u30ca\u30ab(\u30b5\u30de\u30fc)"
         }
     ],
     "BossName": [
@@ -396,6 +401,6 @@
         "\u30b9\u30d4\u30ea\u30c3\u30c8\u30db\u30fc\u30f3",
         "\u30ab\u30eb\u30ad\u30ce\u30b9"
     ],
-    "BATTLESTART": "06/25",
-    "BATTLEEND": "06/29"
+    "BATTLESTART": "07/25",
+    "BATTLEEND": "07/29"
 }
