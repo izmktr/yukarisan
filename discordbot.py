@@ -1935,7 +1935,7 @@ class PrivateMessage:
             await channel.send('数値エラー')
             return
  
-        result = partyInfoNotepad.Infomation(boss, user.author.id)
+        result = partyInfoNotepad.Delete(boss, user.author.id)
 
         if result is not None:
             mes = '%d の編成を削除しました' % boss
