@@ -1632,9 +1632,9 @@ class Cran():
 class PrivateUser:
     DefalutHave = set()
 
-    def __init__(self, channel, id):
-        self.id = id
+    def __init__(self, channel, author):
         self.channel = channel
+        self.author = author
         self.have = set()
         self.unhave = set()
 
@@ -1668,6 +1668,18 @@ class PrivateUser:
 
     def UpdateUnusedList(self):
         self.cacheunusedlist = self.cachehavelist - self.usedlist
+    
+    @staticmethod
+    def DefalutHaveLoad():
+        with open('defaulthave.txt') as f:
+            for s_line in f:
+                n = princessIndex.GetIndex(s_line.strip())
+                if 0 < n:
+                    PrivateUser.DefalutHave.add(n)
+                else:
+                    print('Unknown name %s' % s_line)
+
+PrivateUser.DefalutHaveLoad()
 
 userhash: Dict[int, PrivateUser] = {}
 
@@ -1713,13 +1725,6 @@ class PartyInfoNotepad:
         
         partylist.Append(party)
 
-    def Delete(self, boss, userid, partyindex):
-        partylist = self.notepad.get(boss)
-        if partylist is None:
-            return
-
-        partylist.Delete(userid, partyindex)
-
     @staticmethod
     def SameExist(partylist, party : set) -> bool:
         for p in partylist:
@@ -1754,7 +1759,26 @@ class PartyInfoNotepad:
         
         n = index % devide
         if n < 0 or len(partylist.plist) <= n: return None
-        return partylist.plist[n]
+        info = partylist.plist[n]
+        if info.Viewable(userid):
+            return info
+        return None
+
+    def Modify(self, index, userid, memo)-> Optional[PartyInfomation]:
+        infomation = self.Infomation(index, userid)
+        if infomation is None: return None
+        if infomation.userid != userid: return None
+
+        infomation.memo = memo
+        return infomation
+
+    def Delete(self, index, userid):
+        infomation = self.Infomation(index, userid)
+        if infomation is None: return None
+        if infomation.userid != userid: return None
+
+        infomation.share = -1
+        return infomation
 
     def Serialize(self):
         serial = {}
@@ -1824,14 +1848,14 @@ class PrivateMessage:
             await channel.send('メモ欄が長すぎます')
             return
 
-        n = PartyInfomation(boss, partyset, memo, 0, user.id)
+        n = PartyInfomation(boss, partyset, memo, 0, user.author.id)
         partyInfoNotepad.Register(n)
         partyInfoNotepad.Save()
 
         await channel.send(n.InfoOneLine())
 
     @staticmethod
-    async def Check(user, channel, message):
+    async def Check(user: PrivateUser, channel : discord.channel, message: str):
         result = princessIndex.Chopper(message)
 
         if result is None:
@@ -1840,7 +1864,7 @@ class PrivateMessage:
             await channel.send('/'.join(princessIndex.Convert2Name(result)))
 
     @staticmethod
-    async def List(user, channel, message):
+    async def List(user: PrivateUser, channel : discord.channel, message: str):
         meslist = message.split()
         try:
             boss = int(meslist[0])
@@ -1860,7 +1884,7 @@ class PrivateMessage:
                 return
             party = set(partylist)
  
-        result = partyInfoNotepad.List(boss, party, user.id)
+        result = partyInfoNotepad.List(boss, party, user.author.id)
 
         if 0 < len(result):
             mes = result[0].BossInfo() + '\n' + '\n'.join([n.InfoOneLine() for n in result])
@@ -1869,14 +1893,14 @@ class PrivateMessage:
         await channel.send(mes)
 
     @staticmethod
-    async def Info(user, channel, message):
+    async def Info(user: PrivateUser, channel : discord.channel, message: str):
         try:
             boss = int(message)
         except ValueError:
             await channel.send('数値エラー')
             return
  
-        result = partyInfoNotepad.Infomation(boss, user.id)
+        result = partyInfoNotepad.Infomation(boss, user.author.id)
 
         if result is not None:
             mes = result.BossInfo() + '\n' + result.Infomation()
@@ -1885,7 +1909,44 @@ class PrivateMessage:
         await channel.send(mes)
 
     @staticmethod
-    async def on_message(user, channel, message):
+    async def Modify(user: PrivateUser, channel : discord.channel, message: str):
+        cr = message.find('\n')
+        firstline = message[0:cr]
+        memo = "" if cr < 0 else message[cr:-1].strip()
+        try:
+            boss = int(firstline)
+        except ValueError:
+            await channel.send('数値エラー')
+            return
+ 
+        result = partyInfoNotepad.Modify(boss, user.author.id, memo)
+
+        if result is not None:
+            mes = '%d の編成のメモを変更しました' % boss
+        else:
+            mes = '編成が見つかりません'
+        await channel.send(mes)
+
+    @staticmethod
+    async def Delete(user: PrivateUser, channel : discord.channel, message: str):
+        try:
+            boss = int(message)
+        except ValueError:
+            await channel.send('数値エラー')
+            return
+ 
+        result = partyInfoNotepad.Infomation(boss, user.author.id)
+
+        if result is not None:
+            mes = '%d の編成を削除しました' % boss
+        else:
+            mes = '編成が見つかりません'
+        await channel.send(mes)
+
+    @staticmethod
+    async def on_message(user: PrivateUser, channel : discord.channel, message: str):
+        Outlog('private.log', '[%s]%s' % (user.author.name, message) )
+
         opt = Command(message, 'party')
         if opt is not None:
             await PrivateMessage.PartyRegister(user, channel, opt)
@@ -1904,6 +1965,16 @@ class PrivateMessage:
         opt = Command(message, ['info'])
         if opt is not None:
             await PrivateMessage.Info(user, channel, opt)
+            return False
+
+        opt = Command(message, ['modify'])
+        if opt is not None:
+            await PrivateMessage.Modify(user, channel, opt)
+            return False
+
+        opt = Command(message, ['del'])
+        if opt is not None:
+            await PrivateMessage.Delete(user, channel, opt)
             return False
 
         opt = Command(message, ['check'])
@@ -2029,7 +2100,7 @@ async def on_message(message):
     if message.channel.type == discord.ChannelType.private:
         user = userhash.get(message.author.id)
         if user is None:
-            user = PrivateUser(message.channel, message.author.id)
+            user = PrivateUser(message.channel, message.author)
             userhash[message.author.id] = user
         
         result = await PrivateMessage.on_message(user, message.channel, message.content)
