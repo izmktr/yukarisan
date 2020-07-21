@@ -991,14 +991,6 @@ class Cran():
             member.Reset()
             return True
 
-        if (message.content == 'daylyreset'):
-            self.Reset()
-            return True
-
-        if (message.content == 'monthlyreset'):
-            self.FullReset()
-            return True
-
         opt = Command(message.content, 'history')
         if (opt is not None):
             if (opt == ''):
@@ -1038,16 +1030,6 @@ class Cran():
             await message.channel.send(gacha.ToString())
             return False
 
-        opt = Command(message.content, 'delete')
-        if (opt is not None):
-            result = self.DeleteMember(opt)
-            if (result is not None):
-                await message.channel.send('%s を消しました' % result.name)
-                return True
-            else:
-                await message.channel.send('メンバーがいません')
-                return False
-        
         opt = Command(message.content, 'score')
         if (opt is not None):
             result = self.ScoreCalc(opt)
@@ -1059,7 +1041,28 @@ class Cran():
                 await message.channel.send('計算できませんでした')
                 return False
 
-        if self.admin:
+# 管理者コマンド 
+        if message.author.guild_permissions.administrator:
+            opt = Command(message.content, 'delete')
+            if (opt is not None):
+                result = self.DeleteMember(opt)
+                if (result is not None):
+                    await message.channel.send('%s を消しました' % result.name)
+                    return True
+                else:
+                    await message.channel.send('メンバーがいません')
+                    return False
+
+            if (message.content == 'daylyreset'):
+                self.Reset()
+                return True
+
+            if (message.content == 'monthlyreset'):
+                self.FullReset()
+                return True
+
+# 全体管理者コマンド 
+        if self.admin and message.author.guild_permissions.administrator:
             opt = Command(message.content, 'bossname')
             if (opt is not None):
                 await self.BossName(opt, message.channel)
