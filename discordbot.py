@@ -329,7 +329,8 @@ class Gacha():
         message += '%s %s\n' % (self.gachatype, GachaData[-1].startdate)
 
         for rate in self.gachabox:
-            message += '%f %d %s len:%d\n' % (rate.rate, rate.star, rate.namelist[-1], len(rate.namelist) )
+            unitrate = 0.0 if len(rate.namelist) <= 0 else rate.rate / len(rate.namelist)
+            message += '%0.3f(%0.3f) %d %s len:%d\n' % (rate.rate, unitrate, rate.star, rate.namelist[-1], len(rate.namelist) )
 
         return message
 
@@ -981,17 +982,20 @@ class Cran():
         mlist = []
         deletemember = []
 
-        for member in self.guild.members:
-            if not member.bot:
-                mlist.append(member.id)
-                if self.members.get(member.id) is None:
-                    self.GetMember(member)
-                    mes += member.name + "を追加しました\n"
+        if len([m for m in self.guild.members if not m.bot]) < 40:
+            for member in self.guild.members:
+                if not member.bot:
+                    mlist.append(member.id)
+                    if self.members.get(member.id) is None:
+                        self.GetMember(member)
+                        mes += member.name + "を追加しました\n"
 
-        for id, member in self.members.items():
-            if (id not in mlist):
-                deletemember.append(id)
-                mes += member.name + "を削除しました\n"
+            for id, member in self.members.items():
+                if (id not in mlist):
+                    deletemember.append(id)
+                    mes += member.name + "を削除しました\n"
+        else :
+            mes += '人数が多すぎるので、自動調整は行なえません'
 
         for id in deletemember:
             del self.members[id]
@@ -1030,6 +1034,12 @@ class Cran():
         GlobalStrage.Save()
 
         await channel.send(mes)
+    
+    def FindChannel(self, guild : discord.guild, name : str) -> Optional[discord.TextChannel]:
+        outchannel = [channel for channel in guild.channels if channel.name == name]
+        if 0 < len(outchannel):
+            return client.get_channel(outchannel[0].id)
+        return None
 
     async def GachaDelete(self, opt, channel):
         global GachaData
@@ -1051,10 +1061,8 @@ class Cran():
         self.inputchannel = message.channel
         
         if self.outputchannel is None:
-            outchannel = [channel for channel in message.guild.channels if channel.name == outputchannel]
-            if 0 < len(outchannel):
-                self.outputchannel = client.get_channel(outchannel[0].id)
-            else:
+            self.outputchannel = self.FindChannel(message.guild, outputchannel)
+            if self.outputchannel is None:
                 await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
         if (message.content in CmdAttack):
@@ -1260,6 +1268,7 @@ class Cran():
             await channel.send('usage) bossname boss1,boss2,boss3,boss4,boss5')
             return
         
+        global BossName
         BossName = namearray
         GlobalStrage.Save()
 
@@ -1633,12 +1642,15 @@ class PrivateUser:
     DefalutHave = set()
 
     def __init__(self, channel, author):
+        self.id = author.id if author is not None else 0
         self.channel = channel
         self.author = author
+        self.guildid = 0
+        self.clan : Optional[Cran] = None
         self.have = set()
         self.unhave = set()
 
-        self.usedlist = set()
+        self.used = set()
         self.cachehavelist  = set()
         self.cacheunusedlist = set()
         
@@ -1660,15 +1672,40 @@ class PrivateUser:
 
     def Used(self, usedlist : List[int]):
         for n in usedlist:
-            self.usedlist.add(n)
+            self.used.add(n)
         self.UpdateUnusedList()
 
     def UpdateHaveList(self):
         self.cachehavelist = (self.DefalutHave | self.have) - self.unhave
 
     def UpdateUnusedList(self):
-        self.cacheunusedlist = self.cachehavelist - self.usedlist
-    
+        self.cacheunusedlist = self.cachehavelist - self.used
+
+    def Serialize(self):
+        dic = {
+            'id' : self.author.id,
+            'guildid': self.guildid,
+            'have' : list(self.have),
+            'unhave' : list(self.unhave),
+            'used' : list(self.used)
+        }
+
+        return dic
+
+    @staticmethod
+    def Deserialize(data):
+        ret = PrivateUser(None, None)
+
+        for key in ['id', 'guildid']:
+            if key in data:
+                ret.__dict__[key] = data[key]
+
+        for key in ['have', 'unhave', 'used']:
+            if key in data:
+                ret.__dict__[key] = set(data[key])
+
+        return ret
+
     @staticmethod
     def DefalutHaveLoad():
         with open('defaulthave.txt') as f:
@@ -1944,8 +1981,55 @@ class PrivateMessage:
         await channel.send(mes)
 
     @staticmethod
+    def GetClanList(userid : int):
+        clanlist:List[Cran] = []
+
+        for clan in cranhash.values():
+            if userid in clan.members:
+                clanlist.append(clan)
+        return clanlist
+
+    @staticmethod
+    async def SetClan(user : PrivateUser, channel, opt : str):
+        clanlist = PrivateMessage.GetClanList(user.id)
+        matchclan = [c for c in clanlist if c.guild is not None and c.guild.name == opt]
+
+        if len(matchclan) == 0:
+            await channel.send('クランが見つかりません')
+            return True
+
+        joinclan = [c for c in matchclan if user.id in c.guild.members]
+
+        if len(joinclan) == 0:
+            await channel.send('あなたが属しているクランが見つかりません')
+            return True
+
+        user.clan = joinclan[0]
+        if user.clan is None:
+            user.guildid = user.clan.guild.id
+
+    @staticmethod
     async def on_message(user: PrivateUser, channel : discord.channel, message: str):
         Outlog('private.log', '[%s]%s' % (user.author.name, message) )
+
+        opt = Command(message, 'clan')
+        if opt is not None:
+            await PrivateMessage.SetClan(user, channel, opt)
+            return True
+
+        if user.clan is None:
+            clanlist = PrivateMessage.GetClanList(user.id)
+            if len(clanlist) == 1:
+                await channel.send('%s のクランを参照します')
+                user.clan = clanlist[0]
+                user.guildid = user.clan.guild.id
+            else:
+                mes = ''
+                mes += 'clan [クラン名] でクランを設定してください\n'
+                cnamelist = [clan.guild.name for clan in clanlist if clan.guild is not None]
+                mes += ','.join(cnamelist)
+                await channel.send(mes)
+                return True
 
         opt = Command(message, 'party')
         if opt is not None:
@@ -2074,6 +2158,21 @@ async def on_ready():
     print('ログインしました')
     Outlog(ERRFILE, "login.")
 
+    global cranhash
+
+    for guildid, clan in cranhash.items():
+        if clan.guild is None:
+            matchguild = [g for g in client.guilds if g.id == guildid]
+            if len(matchguild) == 1:
+                clan.guild = matchguild[0]
+                print(matchguild[0].name + " set.")
+
+    for user in userhash.values():
+        if user.clan is None and user.guildid != 0:
+            matchguild = [g for g in client.guilds if g.id == user.guildid]
+            if len(matchguild) == 1:
+                user.clan = matchguild[0]
+
 async def VolatilityMessage(channel, mes, time):
     log = await channel.send(mes)
     await asyncio.sleep(time)
@@ -2102,6 +2201,9 @@ async def on_message(message):
         if user is None:
             user = PrivateUser(message.channel, message.author)
             userhash[message.author.id] = user
+        else:
+            user.channel = message.channel
+            user.author = message.author
         
         result = await PrivateMessage.on_message(user, message.channel, message.content)
 
