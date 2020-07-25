@@ -2135,7 +2135,6 @@ class PrivateMessage:
         joinclan = [c for c in matchclan if match(user.id, c.guild.members)]
 
         if len(joinclan) == 0:
-            l = ['%s[%d]' % (c.name, c.id) for c in matchclan[0].guild.members]
             await channel.send('あなたが属しているクランが見つかりません')
             return
 
