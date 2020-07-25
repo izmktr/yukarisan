@@ -40,6 +40,7 @@ GachaLotData = [
 
 ERRFILE = 'error.log'
 SETTINGFILE = 'setting.json'
+PARTYFILE = 'party.json'
 
 #---設定ここまで---
 
@@ -53,6 +54,8 @@ for l in BossHpData:
 
 GachaData = []
 
+from os.path import expanduser
+from re import match, split
 import tokenkeycode
 
 import asyncio
@@ -91,7 +94,10 @@ class PrizeRate():
         self.heart = heart
     
     def Name(self):
-        return str(7 - self.star) + '等'
+        star = 7 - self.star 
+        if star <= 3:
+            return '[%d等]' % (star)
+        return '%d等' % (star)
 
 class Princess():
     def __init__(self, name, star):
@@ -176,7 +182,7 @@ class GlobalStrage:
             json.dump(dic, a , indent=4)
 
 class Gacha():
-    pname =  ['コッコロ(プリンセス)', 'ペコリーヌ(プリンセス)', 'クリスティーナ', 'ムイミ', 'ネネカ']
+    pname =  ['ユイ(プリンセス)', 'コッコロ(プリンセス)', 'ペコリーヌ(プリンセス)', 'クリスティーナ', 'ムイミ', 'ネネカ']
     s3name = ['マコト','キョウカ','トモ','ルナ','カスミ','ジュン','アリサ','アン','クウカ(オーエド)',
             'ニノン(オーエド)','ミミ(ハロウィン)','ルカ','クロエ','イリヤ','アンナ','グレア','カヤ',
             'イリヤ(クリスマス)','カスミ(マジカル)','ノゾミ','マホ','シズル','サレン','ジータ','ニノン',
@@ -190,10 +196,11 @@ class Gacha():
             'シズル(バレンタイン)','ペコリーヌ(サマー)','スズメ(サマー)','タマキ(サマー)','キャル(サマー)',
             'スズナ(サマー)','サレン(サマー)','マホ(サマー)','マコト(サマー)','ルカ(サマー)',
             'シノブ(ハロウィン)','キョウカ(ハロウィン)','チカ(クリスマス)','アヤネ(クリスマス)',
-            'クリスティーヌ(クリスマス)','エミリア','レム','ウヅキ(デレマス)','リン(デレマス)',]
+            'クリスティーナ(クリスマス)','エミリア','レム','ウヅキ(デレマス)','リン(デレマス)',]
     event = ['レイ(ニューイヤー)','スズメ(ニューイヤー)','エリコ(バレンタイン)','コッコロ(サマー)',
             'ミフユ(サマー)','イオ(サマー)','カオリ(サマー)','アンナ(サマー)','ミヤコ(ハロウィン)',
-            'ミソギ(ハロウィン)','クルミ(クリスマス)','ノゾミ(クリスマス)','ラム','ミオ(デレマス)',]
+            'ミソギ(ハロウィン)','クルミ(クリスマス)','ノゾミ(クリスマス)','ラム','ミオ(デレマス)',
+            'アユミ(ワンダー)', 'キャル','ペコリーヌ','コッコロ','ユイ']
 
 
     def __init__(self):
@@ -322,7 +329,8 @@ class Gacha():
         message += '%s %s\n' % (self.gachatype, GachaData[-1].startdate)
 
         for rate in self.gachabox:
-            message += '%f %d %s len:%d\n' % (rate.rate, rate.star, rate.namelist[-1], len(rate.namelist) )
+            unitrate = 0.0 if len(rate.namelist) <= 0 else rate.rate / len(rate.namelist)
+            message += '%0.3f(%0.3f) %d %s len:%d\n' % (rate.rate, unitrate, rate.star, rate.namelist[-1], len(rate.namelist) )
 
         return message
 
@@ -440,16 +448,18 @@ class StringChopper:
 
         pagelength = len(page)
         for i in range(0, pagelength):
-            if name < page[i][0]:
-                page.insert(i, [name])
-                break
+            if name == page[i]: return
+            if name < page[i]:
+                page.insert(i, name)
+                return
+        page.append(name)
     
     def Print(self):
         for value in self.initialdic.values():
             for name in value:
-                print(name[0])
+                print(name)
     
-    def Serialize(self):
+    def Serialize(self) -> List[str]:
         result = []
         for value in self.initialdic.values():
             for name in value:
@@ -461,8 +471,8 @@ class StringChopper:
         for data in datalist:
             self.Register(data)
 
-    def Chopper(self, namelist, split = -1):
-        if split == 0 or len(namelist) == 0: return []
+    def Chopper(self, namelist : str) -> Optional[List[str]]:
+        if len(namelist) == 0: return []
         tmpname = namelist
 
         page = None
@@ -474,15 +484,127 @@ class StringChopper:
         if len(tmpname) == 0: return None
 
         for s in page:
-            if tmpname.startswith(s[0]):
-                result = [s[1]]
-                if 1 < split:
-                    a = self.Chopper(tmpname[len(s[0]):], split - 1)
-                    if a is None: continue
-                    result.extend(a)
+            if tmpname.startswith(s):
+                result = [s]
+                a = self.Chopper(tmpname[len(s):])
+                if a is None: continue
+                result.extend(a)
                 return result
 
         return None
+    
+class PrincessIndex:
+    def __init__(self):
+        self.name2index :Dict[str, int] = {}
+        self.index2name :Dict[int, str] = {}
+        self.charactorChopper = StringChopper()
+
+    def Register(self, index :int, name :str, alias: bool):
+        if name in self.name2index:
+            print('%s is concrift.' % name)
+            return
+
+        self.name2index[name] = index
+
+        if not alias: self.index2name[index] = name
+
+    def GetIndex(self, name : str) -> int:
+        n = self.name2index.get(name)
+        return n if n is not None else 0
+
+    def GetName(self, index : int) -> str:
+        name = self.index2name.get(index)
+        return name if name is not None else ''
+
+    def Convert2Name(self, namearray) -> List[str]:
+        return [self.index2name[n] for n in namearray]
+
+    def Convert2Index(self, indexarray) -> List[int]:
+        return [self.GetIndex(n) for n in indexarray]
+
+    def Chopper(self, name : str) -> Optional[List[int]]:
+        result = self.charactorChopper.Chopper(name)
+        if result is not None:
+            return self.Convert2Index(result)
+
+        return None
+
+    def Load(self):
+        with open('princess.txt') as f:
+            for s_line in f:
+                namearray = s_line.split()
+                if len(namearray) < 2: continue
+                index = int(namearray[0])
+                for i in range(1, len(namearray)):
+                    self.Register(index, namearray[i], i != 1)
+                    self.charactorChopper.Register(namearray[i])
+
+princessIndex = PrincessIndex()
+princessIndex.Load()
+
+
+class PartyInfomation:
+    def __init__(self, boss, party, memo, share, userid):
+        self.boss: int = boss
+        self.party = set(party)
+        self.memo :str = memo
+        self.share :int = share  # 0:global, 1:private
+        self.userid = userid
+        self.index = 0
+        self.score = 0
+
+    def PartyMatch(self, party: set):
+        return len(self.party & party)
+
+    def Viewable(self, userid):
+        if self.share == 0 : return True
+        if self.share == 1 and userid == self.userid : return True
+        return False
+    
+    def PrincessName(self):
+        return '/'.join(princessIndex.Convert2Name(self.party))
+
+    def InfoOneLine(self):
+        return '%d%03d %s' % (self.boss, self.index, self.PrincessName())
+
+    def InfoOneLineRecomend(self, unused: set):
+        n = self.party - unused
+        if 0 < len(n):
+            pname = '/'.join(princessIndex.Convert2Name(self.party - n))
+            support = '/'.join(princessIndex.Convert2Name(n))
+            return '%d%03d %s/[%s]' % (self.boss, self.index, pname, support)
+        else:
+            return self.InfoOneLine()
+
+    def Infomation(self):
+        return '%d%03d %s\n%s' % (self.boss, self.index, self.PrincessName(), self.memo)
+
+    def BossInfo(self):
+        return '%d段階目 %s' % (self.boss // 10, BossName[self.boss % 10 - 1])
+
+    def Serialize(self):
+        serial = {
+            'boss': self.boss,
+            'party': list(self.party),
+            'memo' : self.memo,
+            'share' : self.share,
+            'userid' : self.userid,
+            'index' : self.index,
+            'score' : self.score,
+        }
+
+        return serial
+
+    @staticmethod
+    def Deserialize(list):
+        des = PartyInfomation(0, [], '', 0, 0)
+        for key, value in list.items():
+            if key == 'party':
+                des.party = set(value)
+            else:
+                des.__dict__[key] = value
+        return des
+
 
 #討伐データ収集
 class DefeatData:
@@ -873,17 +995,20 @@ class Cran():
         mlist = []
         deletemember = []
 
-        for member in self.guild.members:
-            if not member.bot:
-                mlist.append(member.id)
-                if self.members.get(member.id) is None:
-                    self.GetMember(member)
-                    mes += member.name + "を追加しました\n"
+        if len([m for m in self.guild.members if not m.bot]) < 40:
+            for member in self.guild.members:
+                if not member.bot:
+                    mlist.append(member.id)
+                    if self.members.get(member.id) is None:
+                        self.GetMember(member)
+                        mes += member.name + "を追加しました\n"
 
-        for id, member in self.members.items():
-            if (id not in mlist):
-                deletemember.append(id)
-                mes += member.name + "を削除しました\n"
+            for id, member in self.members.items():
+                if (id not in mlist):
+                    deletemember.append(id)
+                    mes += member.name + "を削除しました\n"
+        else :
+            mes += '人数が多すぎるので、自動調整は行なえません'
 
         for id in deletemember:
             del self.members[id]
@@ -922,6 +1047,12 @@ class Cran():
         GlobalStrage.Save()
 
         await channel.send(mes)
+    
+    def FindChannel(self, guild : discord.guild, name : str) -> Optional[discord.TextChannel]:
+        outchannel = [channel for channel in guild.channels if channel.name == name]
+        if 0 < len(outchannel):
+            return client.get_channel(outchannel[0].id)
+        return None
 
     async def GachaDelete(self, opt, channel):
         global GachaData
@@ -943,10 +1074,8 @@ class Cran():
         self.inputchannel = message.channel
         
         if self.outputchannel is None:
-            outchannel = [channel for channel in message.guild.channels if channel.name == outputchannel]
-            if 0 < len(outchannel):
-                self.outputchannel = client.get_channel(outchannel[0].id)
-            else:
+            self.outputchannel = self.FindChannel(message.guild, outputchannel)
+            if self.outputchannel is None:
                 await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
         if (message.content in CmdAttack):
@@ -1155,6 +1284,7 @@ class Cran():
             await channel.send('usage) bossname boss1,boss2,boss3,boss4,boss5')
             return
         
+        global BossName
         BossName = namearray
         GlobalStrage.Save()
 
@@ -1525,19 +1655,684 @@ class Cran():
     
 
 class PrivateUser:
-    DefalutHave = []
+    DefalutHave = set()
 
-    def __init__(self, channel):
+    def __init__(self, channel, author):
+        self.id = author.id if author is not None else 0
         self.channel = channel
-        self.princessdic :Dict[int, int] = {}
+        self.author = author
+        self.guildid = 0
+        self.clan : Optional[Cran] = None
+        self.have = set()
+        self.unhave = set()
+
+        self.used = set()
+        self.cachehavelist  = set()
+        self.cacheunusedlist = set()
         
     def IsHave(self, princessid):
-        d = self.princessdic.get(princessid)
+        if princessid in self.cachehavelist:
+            return True
+        else :
+            return False
 
-        if d is not None:
-            return d
+    def RegiseterPrincess(self, pindex: int, haveflag: bool):
+        if haveflag:
+            if pindex not in self.DefalutHave:
+                self.have.add(pindex)
+            self.unhave.discard(pindex)
+        else:
+            self.have.discard(pindex)
+            self.unhave.add(pindex)
+
+        self.UpdateHaveList()
+
+    def RegisterList(self, havelist : List[int], unhavelist: List[int]):
+        for pindex in havelist:
+            if pindex not in self.DefalutHave:
+                self.have.add(pindex)
+            self.unhave.discard(pindex)
         
-        return princessid in self.DefalutHave
+        for pindex in unhavelist:
+            self.have.discard(pindex)
+            self.unhave.add(pindex)
+
+        self.UpdateHaveList()
+
+    def Used(self, usedlist : List[int], unusedlist : Optional[List[int]] = None):
+        for n in usedlist:
+            self.used.add(n)
+        if unusedlist is not None:
+            for n in unusedlist:
+                self.used.discard(n)
+        self.UpdateUnusedList()
+
+    def UsedClear(self):
+        self.used.clear()
+        self.UpdateUnusedList()
+
+    def UpdateHaveList(self):
+        self.cachehavelist = (self.DefalutHave | self.have) - self.unhave
+
+    def UpdateUnusedList(self):
+        self.cacheunusedlist = self.cachehavelist - self.used
+
+    async def CranCheck(self, channel : discord.channel):
+        if self.clan is None:
+            clanlist = PrivateMessage.GetClanList(self.id)
+            if len(clanlist) == 1:
+                await channel.send('%s のクランを参照します')
+                self.clan = clanlist[0]
+                self.guildid = self.clan.guild.id
+                return True
+            else:
+                mes = ''
+                mes += 'clan [クラン名] でクランを設定してください\n'
+                cnamelist = [clan.guild.name for clan in clanlist if clan.guild is not None]
+                mes += ','.join(cnamelist)
+                await channel.send(mes)
+                return False
+        return True
+
+
+    def Serialize(self):
+        dic = {
+            'id' : self.author.id,
+            'guildid': self.guildid,
+            'have' : list(self.have),
+            'unhave' : list(self.unhave),
+            'used' : list(self.used)
+        }
+
+        return dic
+
+    @staticmethod
+    def Deserialize(data):
+        ret = PrivateUser(None, None)
+
+        for key in ['id', 'guildid']:
+            if key in data:
+                ret.__dict__[key] = data[key]
+
+        for key in ['have', 'unhave', 'used']:
+            if key in data:
+                ret.__dict__[key] = set(data[key])
+
+        ret.UpdateHaveList()
+        ret.UpdateUnusedList()
+
+        return ret
+
+    @staticmethod
+    def DefalutHaveLoad():
+        with open('defaulthave.txt') as f:
+            for s_line in f:
+                n = princessIndex.GetIndex(s_line.strip())
+                if 0 < n:
+                    PrivateUser.DefalutHave.add(n)
+                else:
+                    print('Unknown name %s' % s_line)
+
+    @staticmethod
+    def SaveList(userdic):
+        deserializedlist = {}
+        for key,value in userdic.items():
+            deserializedlist[key] = value.Serialize()
+
+        with open('user.json', 'w') as a:
+            json.dump(deserializedlist, a , indent=4)
+
+
+    @staticmethod
+    def LoadList(userdic):
+        try:
+            with open('user.json') as a:
+                mdic =  json.load(a)
+                for key,value in mdic.items():
+                    userdic[int(key)] = PrivateUser.Deserialize(value)
+        except FileNotFoundError:
+            pass
+
+PrivateUser.DefalutHaveLoad()
+
+userhash: Dict[int, PrivateUser] = {}
+
+PrivateUser.LoadList(userhash)
+
+class PartyInfoList:
+    def __init__(self):
+        self.plist :List[PartyInfomation] = []
+
+    def Append(self, pinfo : PartyInfomation):
+        index = len(self.plist)
+        pinfo.index = index
+        self.plist.append(pinfo)
+        return index
+
+    def Delete(self, userid, index):
+        if 0 <= index and index < len(self.plist):
+            if self.plist[index].userid== userid:
+                self.plist[index].share = -1
+    
+    def Serialize(self):
+        serial = {
+            'plist' : [m.Serialize() for m in self.plist]
+        }
+
+        return serial
+
+    @staticmethod
+    def Deserialize(list):
+        des = PartyInfoList()
+        if 'plist' in list:
+            des.plist = [PartyInfomation.Deserialize(m) for m in list['plist']]
+        
+        return des
+
+class PartyInfoNotepad:
+    def __init__(self):
+        self.notepad : Dict[int, PartyInfoList] = {}
+   
+    def Register(self, party : PartyInfomation):
+        partylist = self.notepad.get(party.boss)
+        if partylist is None:
+            partylist = PartyInfoList()
+            self.notepad[party.boss] = partylist
+        
+        partylist.Append(party)
+
+    @staticmethod
+    def SameExist(partylist, party : set) -> bool:
+        for p in partylist:
+            if 5 <= p.PartyMatch(party):
+                return True
+        
+        return False
+
+    def List(self, boss, party: Optional[set], userid) -> List[PartyInfomation]:
+        partylist = self.notepad.get(boss)
+        if partylist is None:
+            return []
+        
+        result : List[PartyInfomation] = []
+        for p in partylist.plist:
+            if not p.Viewable(userid): continue
+            if party is not None and p.PartyMatch(party) < len(party): continue
+#            if self.SameExist(result, p.party): continue
+
+            result.append(p)
+            if  9 <= len(result): break
+
+        return result
+
+    def Infomation(self, index, userid) -> Optional[PartyInfomation]:
+        devide = 1000
+
+        partylist = self.notepad.get(index // devide)
+
+        if partylist is None:
+            return None
+        
+        n = index % devide
+        if n < 0 or len(partylist.plist) <= n: return None
+        info = partylist.plist[n]
+        if info.Viewable(userid):
+            return info
+        return None
+
+    def Modify(self, index, userid, memo)-> Optional[PartyInfomation]:
+        infomation = self.Infomation(index, userid)
+        if infomation is None: return None
+        if infomation.userid != userid: return None
+
+        infomation.memo = memo
+        return infomation
+
+    def Delete(self, index, userid):
+        infomation = self.Infomation(index, userid)
+        if infomation is None: return None
+        if infomation.userid != userid: return None
+
+        infomation.share = -1
+        return infomation
+
+    def Serialize(self):
+        serial = {}
+
+        for key, value in self.notepad.items():
+            serial[key] = value.Serialize()
+
+        return {
+            'PartyInfoNotepad': serial
+        }
+
+    @staticmethod
+    def Deserialize(list):
+        des = PartyInfoNotepad()
+        if 'PartyInfoNotepad' in list:
+            for key, value in list['PartyInfoNotepad'].items():
+                des.notepad[int(key)] = PartyInfoList.Deserialize(value)
+        
+        return des
+
+    def Save(self):
+        PartyInfoNotepadSerialize = self.Serialize()
+
+        with open(PARTYFILE, 'w') as a:
+            json.dump(PartyInfoNotepadSerialize, a , indent=4)
+
+    @staticmethod
+    def Load():
+        try:
+            with open(PARTYFILE, 'r') as a:
+                mdic =  json.load(a)
+                return PartyInfoNotepad.Deserialize(mdic)
+        except FileNotFoundError:
+            return PartyInfoNotepad()
+
+partyInfoNotepad = PartyInfoNotepad.Load()
+
+class PrivateMessage:
+
+    @staticmethod
+    async def Recomend(user: PrivateUser, channel : discord.channel, message : str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        try:
+            bosslevel = int(message)
+        except ValueError: 
+            bosslevel = user.clan.BossLevel()
+
+        mes = ''
+        if bosslevel <= 4:
+            for i in range(BOSSNUMBER):
+                boss = bosslevel * 10 + i + 1
+                result = partyInfoNotepad.List(boss, None, user.author.id)
+                displist = [n for n in result if len(n.party) - 1 <= n.PartyMatch(user.cacheunusedlist)]
+                mes += '%d:%s %d\n' % (i + 1, BossName[i], len(displist))
+                for n, disp in enumerate(displist):
+                    if 3 <= n: break
+                    mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+        else:
+            bn = bosslevel % 10 - 1
+            if 0 <= bn and bn < BOSSNUMBER:
+                result = partyInfoNotepad.List(bosslevel, None, user.author.id)
+                displist = [n for n in result if len(n.party) - 1 <= n.PartyMatch(user.cacheunusedlist)]
+                mes += '%d:%s %d\n' % (bn + 1, BossName[bn], len(displist))
+                for n, disp in enumerate(displist):
+                    if 9 <= n: break
+                    mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+            else:
+                mes += 'ボス番号エラー'
+
+        await channel.send(mes)
+
+    @staticmethod
+    async def PartyRegister(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        cr = message.find('\n')
+        firstline = message[0:cr]
+        memo = "" if cr < 0 else message[cr:-1].strip()
+
+        try:
+            boss = int(firstline[0:2])
+        except ValueError:
+            await channel.send('ボス番号不正')
+            return
+
+        if boss // 10 < 0 or 4 < boss // 10 or boss % 10 <= 0 or 5 < boss % 10:
+            await channel.send('ボス番号不正')
+            return
+
+        partyset = princessIndex.Chopper(firstline[3:])
+
+        if partyset is None:
+            await channel.send('パーティメンバーの解析失敗')
+            return
+        
+        if 1800 < len(memo.encode('utf-8')):
+            await channel.send('メモ欄が長すぎます')
+            return
+
+        n = PartyInfomation(boss, partyset, memo, 0, user.author.id)
+        partyInfoNotepad.Register(n)
+        partyInfoNotepad.Save()
+
+        await channel.send(n.InfoOneLine())
+
+    @staticmethod
+    async def Check(user: PrivateUser, channel : discord.channel, message: str):
+        result = princessIndex.Chopper(message)
+
+        if result is None:
+            await channel.send('パーティの解析失敗')
+        else:
+            await channel.send('/'.join(princessIndex.Convert2Name(result)))
+
+    @staticmethod
+    async def List(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        meslist = message.split()
+        try:
+            boss = int(meslist[0])
+        except (ValueError, IndexError):
+            await channel.send('数値エラー')
+            return
+
+        if 100 <= boss:
+            await PrivateMessage.Info(user, channel, message)
+            return
+
+        party = None
+        if 1 < len(meslist):
+            partylist = princessIndex.Chopper(''.join(meslist[1:]))
+            if partylist is None:
+                await channel.send('パーティの解析失敗')
+                return
+            party = set(partylist)
+ 
+        result = partyInfoNotepad.List(boss, party, user.author.id)
+
+        if 0 < len(result):
+            mes = result[0].BossInfo() + '\n' + '\n'.join([n.InfoOneLine() for n in result])
+        else:
+            mes = '件数0'
+        await channel.send(mes)
+
+    @staticmethod
+    async def Info(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        try:
+            boss = int(message)
+        except ValueError:
+            await channel.send('数値エラー')
+            return
+ 
+        result = partyInfoNotepad.Infomation(boss, user.author.id)
+
+        if result is not None:
+            mes = result.BossInfo() + '\n' + result.Infomation()
+        else:
+            mes = '見つかりません'
+        await channel.send(mes)
+
+    @staticmethod
+    async def Modify(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        cr = message.find('\n')
+        firstline = message[0:cr]
+        memo = "" if cr < 0 else message[cr:-1].strip()
+        try:
+            boss = int(firstline)
+        except ValueError:
+            await channel.send('数値エラー')
+            return
+ 
+        result = partyInfoNotepad.Modify(boss, user.author.id, memo)
+
+        if result is not None:
+            mes = '%d の編成のメモを変更しました' % boss
+        else:
+            mes = '編成が見つかりません'
+        await channel.send(mes)
+
+    @staticmethod
+    async def Delete(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        try:
+            boss = int(message)
+        except ValueError:
+            await channel.send('数値エラー')
+            return
+ 
+        result = partyInfoNotepad.Delete(boss, user.author.id)
+
+        if result is not None:
+            mes = '%d の編成を削除しました' % boss
+        else:
+            mes = '編成が見つかりません'
+        await channel.send(mes)
+
+    @staticmethod
+    def GetClanList(userid : int):
+        clanlist:List[Cran] = []
+
+        for clan in cranhash.values():
+            if userid in clan.members:
+                clanlist.append(clan)
+        return clanlist
+
+    @staticmethod
+    def UserSave():
+        global userhash
+        PrivateUser.SaveList(userhash)
+
+    @staticmethod
+    async def SetClan(user : PrivateUser, channel, opt : str):
+        clanlist = PrivateMessage.GetClanList(user.id)
+        matchclan = [c for c in clanlist if c.guild is not None and c.guild.name == opt]
+
+        if len(matchclan) == 0:
+            await channel.send('クランが見つかりません')
+            return
+
+        def match(id, l):
+            for m in l:
+                if m.id == id: return True
+            return False
+
+        joinclan = [c for c in matchclan if match(user.id, c.guild.members)]
+
+        if len(joinclan) == 0:
+            l = ['%s[%d]' % (c.name, c.id) for c in matchclan[0].guild.members]
+            await channel.send('あなたが属しているクランが見つかりません')
+            return
+
+        user.clan = joinclan[0]
+        if user.clan is not None:
+            user.guildid = user.clan.guild.id
+
+        await channel.send('%s にクランを設定しました' % (opt))
+        PrivateMessage.UserSave()
+
+    @staticmethod
+    async def Have(user: PrivateUser, channel : discord.channel, message: str):
+        meslist = message.split()
+        havelist = []
+        unhavelist = []
+
+        global princessIndex
+
+        if len(meslist) == 0:
+            mes = ''
+            if 0 < len(user.have):
+                havename = princessIndex.Convert2Name(user.have)
+                mes += '所持:%s\n' % ','.join(havename)
+
+            if 0 < len(user.unhave):
+                unhavename = princessIndex.Convert2Name(user.unhave)
+                mes += '未所持:%s\n' % ','.join(unhavename)
+
+            if 0 < len(mes):
+                await channel.send(mes)
+            else:
+                await channel.send('所持登録されてません')
+            return
+
+        for m in meslist:
+            if 0 < len(m) and m[0] == '-':
+                result = princessIndex.Chopper(m[1:])
+                if result is None:
+                    await channel.send('%s で解析失敗' % m)
+                    return
+                unhavelist.extend(result)
+            else:
+                result = princessIndex.Chopper(m)
+                if result is None:
+                    await channel.send('%s で解析失敗' % m)
+                    return 
+                havelist.extend(result)
+
+        user.RegisterList(havelist, unhavelist)
+        PrivateMessage.UserSave()
+
+        mes = ''
+        if 0 < len(havelist):
+            havename = princessIndex.Convert2Name(havelist)
+            mes += '所持追加:%s\n' % ','.join(havename)
+        
+        if 0 < len(unhavelist):
+            unhavename = princessIndex.Convert2Name(unhavelist)
+            mes += '未所持追加:%s\n' % ','.join(unhavename)
+        await channel.send(mes)
+
+    @staticmethod
+    async def Use(user: PrivateUser, channel : discord.channel, message: str):
+        meslist = message.split()
+
+        global princessIndex
+
+        if len(meslist) == 0:
+            mes = ''
+            if 0 < len(user.used):
+                usedname = princessIndex.Convert2Name(user.used)
+                mes += '使用:%s\n' % ','.join(usedname)
+
+            if 0 < len(mes):
+                await channel.send(mes)
+            else:
+                await channel.send('使用済みキャラがいません')
+            return
+        
+        if message == 'reset':
+            await PrivateMessage.UseReset(user, channel, message)
+            return 
+
+        try:
+            boss = int(meslist[0])
+        except ValueError:
+            boss = 0
+
+        usedlist = []
+        unusedlist = []
+        if 0 < boss:
+            partyinfo = partyInfoNotepad.Infomation(boss, user.author.id)
+            if partyinfo is None:
+                await channel.send('%d の編成が見つかりません' % boss)
+                return
+            
+            party = partyinfo.party.copy()
+
+            if 1 < len(meslist):
+                result = princessIndex.Chopper(meslist[1])
+                if result is None:
+                    await channel.send('%s で解析失敗' % meslist[1])
+                    return
+                if 0 < len(result):
+                    party.discard(result[0])
+            
+            usedlist.extend(list(party))
+
+        else:
+            for m in meslist:
+                if 0 < len(m) and m[0] == '-':
+                    result = princessIndex.Chopper(m[1:])
+                    if result is None:
+                        await channel.send('%s で解析失敗' % m)
+                        return
+                    unusedlist.extend(result)
+                else:
+                    result = princessIndex.Chopper(m)
+                    if result is None:
+                        await channel.send('%s で解析失敗' % m)
+                        return 
+                    usedlist.extend(result)
+
+        user.Used(usedlist, unusedlist)
+        PrivateMessage.UserSave()
+
+        mes = ''
+        if 0 < len(usedlist):
+            usedname = princessIndex.Convert2Name(usedlist)
+            mes += '使用済み:%s\n' % ','.join(usedname)
+        
+        if 0 < len(unusedlist):
+            unusedname = princessIndex.Convert2Name(unusedlist)
+            mes += '未使用:%s\n' % ','.join(unusedname)
+        await channel.send(mes)
+
+    @staticmethod
+    async def UseReset(user: PrivateUser, channel : discord.channel, message: str):
+        user.UsedClear()
+        PrivateMessage.UserSave()
+        mes = '使用済みキャラをリセットしました'
+        await channel.send(mes)
+
+    @staticmethod
+    async def on_message(user: PrivateUser, channel : discord.channel, message: str):
+        Outlog('private.log', '[%s]%s' % (user.author.name, message) )
+
+        opt = Command(message, 'clan')
+        if opt is not None:
+            await PrivateMessage.SetClan(user, channel, opt)
+            return True
+
+        opt = Command(message, 'party')
+        if opt is not None:
+            await PrivateMessage.PartyRegister(user, channel, opt)
+            return True
+
+        opt = Command(message, ['おすすめ', 'reco'])
+        if opt is not None:
+            await PrivateMessage.Recomend(user, channel, opt)
+            return False
+
+        opt = Command(message, ['list'])
+        if opt is not None:
+            await PrivateMessage.List(user, channel, opt)
+            return False
+
+        opt = Command(message, ['info'])
+        if opt is not None:
+            await PrivateMessage.Info(user, channel, opt)
+            return False
+
+        opt = Command(message, ['modify'])
+        if opt is not None:
+            await PrivateMessage.Modify(user, channel, opt)
+            return False
+
+        opt = Command(message, ['del'])
+        if opt is not None:
+            await PrivateMessage.Delete(user, channel, opt)
+            return False
+
+        opt = Command(message, ['check'])
+        if opt is not None:
+            await PrivateMessage.Check(user, channel, opt)
+            return False
+
+        opt = Command(message, ['have'])
+        if opt is not None:
+            await PrivateMessage.Have(user, channel, opt)
+            return False
+
+        opt = Command(message, ['use'])
+        if opt is not None:
+            await PrivateMessage.Use(user, channel, opt)
+            return False
+
 
 # 接続に必要なオブジェクトを生成
 client = discord.Client()
@@ -1574,7 +2369,7 @@ async def loop():
     nowtime = now.strftime('%H:%M')
 
     if nowtime == '05:00':
-        for cran in cranhash.values():
+        for guildid, cran in cranhash.items():
             message = 'おはようございます\nメンバーの情報をリセットしました'
             resetflag = True if cran.TotalSortie() == 0 else False
 
@@ -1600,6 +2395,13 @@ async def loop():
                     await Output(cran, cran.Status())
             else:
                 cran.lastmessage = None
+
+            Cran.Save(cran, guildid)
+
+        for user in userhash.values():
+            user.UsedClear()
+        
+        PrivateUser.SaveList(userhash)
 
     if nowtime == '23:59':
         for cran in cranhash.values():
@@ -1631,6 +2433,7 @@ async def on_ready():
     Outlog(ERRFILE, "login.")
 
     global cranhash
+    global userhash
 
     for guildid, clan in cranhash.items():
         if clan.guild is None:
@@ -1640,6 +2443,13 @@ async def on_ready():
                 print(matchguild[0].name + " set.")
             else: 
                 print('[%d] not found' % guildid)
+
+    for user in userhash.values():
+        if user.clan is None and user.guildid != 0:
+            user.clan = cranhash.get(user.guildid)
+            if user.clan is None:
+                print('[%d] not found' % user.guildid)
+                user.guildid = 0
 
 async def VolatilityMessage(channel, mes, time):
     log = await channel.send(mes)
@@ -1664,9 +2474,20 @@ async def on_message(message):
             await Output(cran, cran.Status())
         return
 
+    global userhash
     if message.channel.type == discord.ChannelType.private:
-        await message.channel.send(message.content)
+        user = userhash.get(message.author.id)
+        if user is None:
+            user = PrivateUser(message.channel, message.author)
+            userhash[message.author.id] = user
+        else:
+            user.channel = message.channel
+            user.author = message.author
+        
+        result = await PrivateMessage.on_message(user, message.channel, message.content)
 
+        if result:
+            pass 
         return
 
 @client.event
