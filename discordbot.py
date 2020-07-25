@@ -1630,6 +1630,17 @@ async def on_ready():
     print('ログインしました')
     Outlog(ERRFILE, "login.")
 
+    global cranhash
+
+    for guildid, clan in cranhash.items():
+        if clan.guild is None:
+            matchguild = [g for g in client.guilds if g.id == guildid]
+            if len(matchguild) == 1:
+                clan.guild = matchguild[0]
+                print(matchguild[0].name + " set.")
+            else: 
+                print('[%d] not found' % guildid)
+
 async def VolatilityMessage(channel, mes, time):
     log = await channel.send(mes)
     await asyncio.sleep(time)
