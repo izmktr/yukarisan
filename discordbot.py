@@ -2366,7 +2366,7 @@ async def loop():
     nowtime = now.strftime('%H:%M')
 
     if nowtime == '05:00':
-        for cran in cranhash.values():
+        for guildid, cran in cranhash.items():
             message = 'おはようございます\nメンバーの情報をリセットしました'
             resetflag = True if cran.TotalSortie() == 0 else False
 
@@ -2392,6 +2392,13 @@ async def loop():
                     await Output(cran, cran.Status())
             else:
                 cran.lastmessage = None
+
+            Cran.Save(cran, guildid)
+
+        for user in userhash.values():
+            user.UsedClear()
+        
+        PrivateUser.SaveList(userhash)
 
     if nowtime == '23:59':
         for cran in cranhash.values():
