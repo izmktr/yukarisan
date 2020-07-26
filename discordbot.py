@@ -1713,6 +1713,7 @@ class PrivateUser:
 
     def UpdateHaveList(self):
         self.cachehavelist = (self.DefalutHave | self.have) - self.unhave
+        self.UpdateUnusedList()
 
     def UpdateUnusedList(self):
         self.cacheunusedlist = self.cachehavelist - self.used
@@ -1981,7 +1982,7 @@ class PrivateMessage:
         mes += '%d-%d:%s %d\n' % (bosslevel, bossindex + 1, BossName[bossindex], len(displist))
         for n, disp in enumerate(displist):
             if listnum <= n: break
-            mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+            mes += disp.InfoOneLine() + '\n'
         
         return mes
 
