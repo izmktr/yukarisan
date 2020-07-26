@@ -400,6 +400,14 @@
                 "\u30b3\u30c3\u30b3\u30ed(\u30cb\u30e5\u30fc\u30a4\u30e4\u30fc)",
                 "\u30ad\u30e3\u30eb(\u30cb\u30e5\u30fc\u30a4\u30e4\u30fc)"
             ]
+        },
+        {
+            "startdate": "2020/07/27 12:00:00",
+            "gachatype": "l",
+            "name": [
+                "\u30ad\u30e3\u30eb(\u30b5\u30de\u30fc)",
+                "\u30da\u30b3\u30ea\u30fc\u30cc(\u30b5\u30de\u30fc)"
+            ]
         }
     ],
     "BossName": [
