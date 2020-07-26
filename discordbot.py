@@ -1935,6 +1935,20 @@ partyInfoNotepad = PartyInfoNotepad.Load()
 class PrivateMessage:
 
     @staticmethod
+    def RecomendDisplay(user :PrivateUser, boss: int, listnum : int):
+        bosslevel = boss // 10
+        bossindex = boss % 10 - 1
+        mes = ''
+        result = partyInfoNotepad.List(boss, None, user.author.id)
+        displist = [n for n in result if len(n.party) - 1 <= n.PartyMatch(user.cacheunusedlist)]
+        mes += '%d-%d:%s %d\n' % (bosslevel, bossindex + 1, BossName[bossindex], len(displist))
+        for n, disp in enumerate(displist):
+            if listnum <= n: break
+            mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+        
+        return mes
+
+    @staticmethod
     async def Recomend(user: PrivateUser, channel : discord.channel, message : str):
         await user.CranCheck(channel)
         if user.clan is None: return
@@ -1948,21 +1962,62 @@ class PrivateMessage:
         if bosslevel <= 4:
             for i in range(BOSSNUMBER):
                 boss = bosslevel * 10 + i + 1
-                result = partyInfoNotepad.List(boss, None, user.author.id)
-                displist = [n for n in result if len(n.party) - 1 <= n.PartyMatch(user.cacheunusedlist)]
-                mes += '%d:%s %d\n' % (i + 1, BossName[i], len(displist))
-                for n, disp in enumerate(displist):
-                    if 3 <= n: break
-                    mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+                mes += PrivateMessage.RecomendDisplay(user, boss, 3)
         else:
             bn = bosslevel % 10 - 1
             if 0 <= bn and bn < BOSSNUMBER:
-                result = partyInfoNotepad.List(bosslevel, None, user.author.id)
-                displist = [n for n in result if len(n.party) - 1 <= n.PartyMatch(user.cacheunusedlist)]
-                mes += '%d:%s %d\n' % (bn + 1, BossName[bn], len(displist))
-                for n, disp in enumerate(displist):
-                    if 9 <= n: break
-                    mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+                mes += PrivateMessage.RecomendDisplay(user, bosslevel, 9)
+            else:
+                mes += 'ボス番号エラー'
+
+        await channel.send(mes)
+
+    @staticmethod
+    def ListDisplay(user :PrivateUser, boss: int, listnum : int, party: Optional[set]):
+        bosslevel = boss // 10
+        bossindex = boss % 10 - 1
+        mes = ''
+        displist = partyInfoNotepad.List(boss, party, user.author.id)
+        mes += '%d-%d:%s %d\n' % (bosslevel, bossindex + 1, BossName[bossindex], len(displist))
+        for n, disp in enumerate(displist):
+            if listnum <= n: break
+            mes += disp.InfoOneLineRecomend(user.cacheunusedlist) + '\n'
+        
+        return mes
+
+    @staticmethod
+    async def List(user: PrivateUser, channel : discord.channel, message: str):
+        await user.CranCheck(channel)
+        if user.clan is None: return
+
+        meslist = message.split()
+        try:
+            bosslevel = int(meslist[0])
+        except (ValueError, IndexError):
+            bosslevel = user.clan.BossLevel()
+
+        if 100 <= bosslevel:
+            await PrivateMessage.Info(user, channel, message)
+            return
+
+        party = None
+        if 1 < len(meslist):
+            partylist = princessIndex.Chopper(' '.join(meslist[1:]))
+            if partylist is None:
+                await channel.send('パーティの解析失敗')
+                return
+            party = set(partylist)
+
+
+        mes = ''
+        if bosslevel <= 4:
+            for i in range(BOSSNUMBER):
+                boss = bosslevel * 10 + i + 1
+                mes += PrivateMessage.ListDisplay(user, boss, 3, party)
+        else:
+            bn = bosslevel % 10 - 1
+            if 0 <= bn and bn < BOSSNUMBER:
+                mes += PrivateMessage.ListDisplay(user, bosslevel, 9, party)
             else:
                 mes += 'ボス番号エラー'
 
@@ -1979,11 +2034,9 @@ class PrivateMessage:
 
         try:
             boss = int(firstline[0:2])
+            if boss // 10 < 0 or 4 < boss // 10 or boss % 10 <= 0 or BOSSNUMBER < boss % 10:
+                raise ValueError
         except ValueError:
-            await channel.send('ボス番号不正')
-            return
-
-        if boss // 10 < 0 or 4 < boss // 10 or boss % 10 <= 0 or 5 < boss % 10:
             await channel.send('ボス番号不正')
             return
 
@@ -2011,38 +2064,6 @@ class PrivateMessage:
             await channel.send('パーティの解析失敗')
         else:
             await channel.send('/'.join(princessIndex.Convert2Name(result)))
-
-    @staticmethod
-    async def List(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
-        if user.clan is None: return
-
-        meslist = message.split()
-        try:
-            boss = int(meslist[0])
-        except (ValueError, IndexError):
-            await channel.send('数値エラー')
-            return
-
-        if 100 <= boss:
-            await PrivateMessage.Info(user, channel, message)
-            return
-
-        party = None
-        if 1 < len(meslist):
-            partylist = princessIndex.Chopper(''.join(meslist[1:]))
-            if partylist is None:
-                await channel.send('パーティの解析失敗')
-                return
-            party = set(partylist)
- 
-        result = partyInfoNotepad.List(boss, party, user.author.id)
-
-        if 0 < len(result):
-            mes = result[0].BossInfo() + '\n' + '\n'.join([n.InfoOneLine() for n in result])
-        else:
-            mes = '件数0'
-        await channel.send(mes)
 
     @staticmethod
     async def Info(user: PrivateUser, channel : discord.channel, message: str):
