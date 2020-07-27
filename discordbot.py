@@ -1618,7 +1618,11 @@ class Clan():
         if 0 < nextlap and 0 < lap:
             nextstr = ' / %d段階目まで%.1f凸' % (self.BossLevel() + 1, nextlap * lap)
 
-        s += '総攻撃数 %d回 (残り %d回 約%.1f周%s)\n' % (attackcount, restattack, restlap, nextstr)
+        def fout(n :float):
+            if n % 1 == 0: return '%d' % n
+            else: return '%0.1f' % n
+
+        s += '総攻撃数 %s回 (残り %s回 約%.1f周%s)\n' % (fout(attackcount), fout(restattack), restlap, nextstr)
 
         for i, c in enumerate(count):
             s += '%d回目 %d人\n' % (i, len(c))
