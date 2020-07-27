@@ -1763,7 +1763,7 @@ class PrivateUser:
 
     def Serialize(self):
         dic = {
-            'id' : self.author.id,
+            'id' : self.id,
             'guildid': self.guildid,
             'have' : list(self.have),
             'unhave' : list(self.unhave),
