@@ -71,6 +71,7 @@ import random
 from typing import List, Dict, Any, Optional
 from io import StringIO
 from typing import Sequence, TypeVar
+from functools import cmp_to_key
 
 #from PIL import Image
 #import numpy as np
@@ -738,6 +739,23 @@ class ClanMember():
         self.history = []
         self.notice = None
         self.gacha = 0
+
+    def OverKillMessage(self):
+        if not self.IsOverkill():
+            return ''
+
+        overkill = '%s %s:%d秒' % (self.name, BossName[self.Overboss() % BOSSNUMBER], self.Overtime())
+        if self.Memo() != '':
+            overkill += ' %s' % (self.Memo())
+        return overkill
+
+    def AttackName(self):
+        s = self.name
+        if (self.IsOverkill()):
+            s += "[o]"
+        if (self.taskkill != 0):
+            s += "[tk]"
+        return s
 
     async def History(self, message):
         str = ''
@@ -1545,7 +1563,7 @@ class Clan():
         levelindex = self.BossLevel() - 1
 
         if len(LevelUpLap) <= levelindex: return 0
-        return (LevelUpLap[levelindex] - self.bosscount / 5 - 1)
+        return (LevelUpLap[levelindex] - self.bosscount / BOSSNUMBER - 1)
 
     def Status(self):
         s = ''
@@ -1553,33 +1571,35 @@ class Clan():
 
         attackcount = 0
         count : List[List[ClanMember]] = [[], [], [], []]
-        overkill = ''
-        okcount = 0
-        attack = ''
 
         for member in self.members.values():
             count[member.SortieCount()].append(member)
             attackcount += member.SortieCount()
-            if (member.IsOverkill()):
-                overkill += '%s %s:%d秒' % (member.name, BossName[member.Overboss() % BOSSNUMBER], member.Overtime())
-                if (member.Memo() != ''):
-                    overkill += ' %s' % (member.Memo())
-                overkill += '\n'
-                okcount += 1
-            if (member.attack):
-                if (attack != ''):
-                    attack += ' '
-                attack += '%s' % (member.name)
 
-        if (attack != ''):
-            s += '攻撃中\n' + attack + '\n'
+        attacklist = [m.name for m in self.members.values() if m.attack]
+        if 0 < len(attacklist):
+            s += '攻撃中\n' + ' '.join(attacklist) + '\n'
 
-        if (overkill != ''):
-            s += '持ち越し %d人\n' % (okcount) + overkill + '\n'
+        oklist = [m for m in self.members.values() if m.IsOverkill()]
 
+        def Compare(a : ClanMember, b : ClanMember):
+            an = a.Overboss()
+            bn = b.Overboss()
+            if (an - bn) % BOSSNUMBER == 0: 
+                return bn - an
+            return (bn % BOSSNUMBER) - (an % BOSSNUMBER)
+
+        overkilllist = sorted(oklist, key=cmp_to_key(Compare))
+        oknum = len(overkilllist)
+
+        if 0 < oknum:
+            s += '持ち越し %d人\n' % (oknum)
+            s += ''.join(['%s\n' % m.OverKillMessage() for m in overkilllist])
+
+        attackcount += oknum * 0.5
         restattack = len(self.members) * MAX_SORITE - attackcount
         lap = self.LapAverage()
-        restlap = ((restattack - okcount * 0.5) / lap) if 0 < lap else 0 
+        restlap = (restattack / lap) if 0 < lap else 0 
 
         nextlap = self.NextLvUpLap()
         nextstr = ''
@@ -1590,18 +1610,7 @@ class Clan():
 
         for i, c in enumerate(count):
             s += '%d回目 %d人\n' % (i, len(c))
-            first = True
-            for member in c:
-                if (first):
-                    first = False
-                else:
-                    s += '  '
-                s += member.name
-                if (member.IsOverkill()):
-                    s += "[o]"
-                if (member.taskkill != 0):
-                    s += "[tk]"
-            s += '\n'
+            s += '  '.join([m.AttackName() for m in c]) + '\n'
         
         return s
 
