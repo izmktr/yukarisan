@@ -656,7 +656,7 @@ class ClanMember():
         self.notice = None
         self.mention = ''
         self.gacha = 0
-        self.attackmessage: discord.Message = None
+        self.attackmessage: Optional[discord.Message] = None
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat):
         self.history.append(
@@ -990,11 +990,18 @@ class Clan():
         for emoji in reactemojis:
             await message.add_reaction(emoji)
 
-    async def RemoveReaction(self, message, overkill, me):
+    async def RemoveReaction(self, message, overkill : bool, me):
         reactemojis = self.emojis if not overkill else self.emojisoverkill
 
         for emoji in reactemojis:
             await message.remove_reaction(emoji, me)
+
+    async def RemoveReactionNotCancel(self, message, overkill : bool, me):
+        reactemojis = self.emojis if not overkill else self.emojisoverkill
+
+        for emoji in reactemojis:
+            if emoji != u"\u274C":
+                await message.remove_reaction(emoji, me)
 
     async def SetNotice(self, member, message, bossstr):
         member.SetNotice(bossstr)
@@ -1097,6 +1104,8 @@ class Clan():
                 await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
         if (message.content in CmdAttack):
+            tmpattack = member.attackmessage if member.attack else None
+
             member.Attack(self)
 
             if (member.taskkill != 0):
@@ -1104,6 +1113,9 @@ class Clan():
 
             member.attackmessage = message
             await self.AddReaction(message, member.IsOverkill())
+
+            if tmpattack is not None:
+                await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
             return True
         
         if (message.content in CmdTaskkill):
