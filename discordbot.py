@@ -402,7 +402,7 @@ class ScoreCalcResult:
         self.hprate = hprate
         self.modscore = modscore
 
-class CranScore:
+class ClanScore:
     @staticmethod
     def Calc(score) -> Optional[ScoreCalcResult]:
         total = 0
@@ -643,7 +643,7 @@ def Command(str, cmd):
         return str[length:].strip()
     return None
 
-class CranMember():
+class ClanMember():
 
     def __init__(self):
         self.attack = False
@@ -670,12 +670,12 @@ class CranMember():
         )
 
 
-    def Attack(self, cran, renewal = True):
+    def Attack(self, clan, renewal = True):
         self.attack = True
         self.attacktime = datetime.datetime.now()
 
         if (renewal):
-            self.boss = cran.bosscount
+            self.boss = clan.bosscount
 
     def SortieCount(self):
         count = 0
@@ -686,16 +686,16 @@ class CranMember():
             return MAX_SORITE
         return count
 
-    def Finish(self, cran, messageid, defeat = False):
+    def Finish(self, clan, messageid, defeat = False):
         self.attack = False
         self.attacktime = None
         self.CreateHistory(messageid, self.boss, 0, defeat)
     
-    def Cancel(self, cran):
+    def Cancel(self, clan):
         self.attack = False
         self.attacktime = None
 
-    def Overkill(self, cran, overtime, messageid):
+    def Overkill(self, clan, overtime, messageid):
         self.attack = False
         self.attacktime = None
         self.CreateHistory(messageid, self.boss, overtime, True)
@@ -863,7 +863,7 @@ class CranMember():
         
         await channel.send(mes)
    
-class Cran():
+class Clan():
     numbermarks = [
         "\N{DIGIT ZERO}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         "\N{DIGIT ONE}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
@@ -897,7 +897,7 @@ class Cran():
     ]
 
     def __init__(self, channelid : int):
-        self.members: Dict[int, CranMember] = {}
+        self.members: Dict[int, ClanMember] = {}
         self.bosscount = 0
         self.channelid = channelid
         self.lastmessage = None
@@ -912,10 +912,10 @@ class Cran():
 
         self.admin = False
 
-    def GetMember(self, author) -> CranMember:
+    def GetMember(self, author) -> ClanMember:
         member = self.members.get(author.id)
         if (member is None):
-            member = CranMember()
+            member = ClanMember()
             self.members[author.id] = member
         member.name = author.display_name
         member.mention = author.mention
@@ -925,13 +925,13 @@ class Cran():
         if self.inputchannel is None: return False
         return self.inputchannel.id == channel_id
 
-    def FindMember(self, name) -> Optional[CranMember]:
+    def FindMember(self, name) -> Optional[ClanMember]:
         for member in self.members.values():
             if (member.name == name):
                 return member
         return None
 
-    def DeleteMember(self, name) -> Optional[CranMember]:
+    def DeleteMember(self, name) -> Optional[ClanMember]:
         for id, member in self.members.items():
             if (member.name == name):
                 del self.members[id]
@@ -1019,7 +1019,7 @@ class Cran():
     def ScoreCalc(self, opt):
         try:
             score = int(opt)
-            return CranScore.Calc(score)
+            return ClanScore.Calc(score)
 
         except ValueError:
             return None
@@ -1133,14 +1133,14 @@ class Cran():
             return False
 
         if (message.content in ['gacha', 'ガチャ']):
-            if (IsCranBattle()):
+            if (IsClanBattle()):
                 return False
             else:
                 await member.Gacha(message.channel)
                 return False
 
         if (message.content in ['gacha10000']):
-            if (IsCranBattle()):
+            if (IsClanBattle()):
                 return False
             else:
                 await member.Gacha10000(message.channel)
@@ -1552,7 +1552,7 @@ class Cran():
         s += '現在 %d-%d %s\n' % (self.bosscount // BOSSNUMBER + 1, self.BossIndex() + 1, BossName[self.BossIndex()])
 
         attackcount = 0
-        count : List[List[CranMember]] = [[], [], [], []]
+        count : List[List[ClanMember]] = [[], [], [], []]
         overkill = ''
         okcount = 0
         attack = ''
@@ -1606,50 +1606,50 @@ class Cran():
         return s
 
     @staticmethod
-    def Save(cran, cranid):
+    def Save(clan, clanid):
         dic = {
             'members': {},
-            'bosscount' : cran.bosscount,
-            'channelid' : cran.channelid,
-            'beforesortie' : cran.beforesortie,
-            'lap' : cran.lap,
-            'defeatlist' : cran.defeatlist,
-            'admin' : cran.admin,
+            'bosscount' : clan.bosscount,
+            'channelid' : clan.channelid,
+            'beforesortie' : clan.beforesortie,
+            'lap' : clan.lap,
+            'defeatlist' : clan.defeatlist,
+            'admin' : clan.admin,
         }
 
-        for mid, member in cran.members.items():
+        for mid, member in clan.members.items():
             dic['members'][mid] = member.Serialize()
 
-        with open('crandata/%d.json' % (cranid) , 'w') as a:
+        with open('crandata/%d.json' % (clanid) , 'w') as a:
             json.dump(dic, a , indent=4)
 
     @staticmethod
-    def Load(cranid):
-        with open('crandata/%d.json' % (cranid)) as a:
+    def Load(clanid):
+        with open('crandata/%d.json' % (clanid)) as a:
             mdic =  json.load(a)
 
-            cran = Cran(mdic['channelid'])
-            cran.bosscount = mdic['bosscount']
+            clan = Clan(mdic['channelid'])
+            clan.bosscount = mdic['bosscount']
 
             if 'beforesortie' in mdic:
-                cran.beforesortie = mdic['beforesortie']
+                clan.beforesortie = mdic['beforesortie']
             
             if 'defeatlist' in mdic:
-                cran.defeatlist = mdic['defeatlist']
+                clan.defeatlist = mdic['defeatlist']
 
             if 'lap' in mdic:
                 for key, value  in mdic['lap'].items():
-                    cran.lap[int(float(key))] = value
+                    clan.lap[int(float(key))] = value
 
             if 'admin' in mdic:
-                cran.admin = mdic['admin']
+                clan.admin = mdic['admin']
 
             for mid, dicmember in mdic['members'].items():
-                member = CranMember()
+                member = ClanMember()
                 member.Deserialize(dicmember)
-                cran.members[int(mid)] = member
+                clan.members[int(mid)] = member
 
-            return cran
+            return clan
 
 
     
@@ -1662,7 +1662,7 @@ class PrivateUser:
         self.channel = channel
         self.author = author
         self.guildid = 0
-        self.clan : Optional[Cran] = None
+        self.clan : Optional[Clan] = None
         self.have = set()
         self.unhave = set()
 
@@ -1718,7 +1718,7 @@ class PrivateUser:
     def UpdateUnusedList(self):
         self.cacheunusedlist = self.cachehavelist - self.used
 
-    async def CranCheck(self, channel : discord.channel):
+    async def ClanCheck(self, channel : discord.channel):
         if self.clan is None:
             clanlist = PrivateMessage.GetClanList(self.id)
             if len(clanlist) == 1:
@@ -1951,7 +1951,7 @@ class PrivateMessage:
 
     @staticmethod
     async def Recomend(user: PrivateUser, channel : discord.channel, message : str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         try:
@@ -1988,7 +1988,7 @@ class PrivateMessage:
 
     @staticmethod
     async def List(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         meslist = message.split()
@@ -2026,7 +2026,7 @@ class PrivateMessage:
 
     @staticmethod
     async def PartyRegister(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         cr = message.find('\n')
@@ -2068,7 +2068,7 @@ class PrivateMessage:
 
     @staticmethod
     async def Info(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         try:
@@ -2087,7 +2087,7 @@ class PrivateMessage:
 
     @staticmethod
     async def Modify(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         cr = message.find('\n')
@@ -2109,7 +2109,7 @@ class PrivateMessage:
 
     @staticmethod
     async def Delete(user: PrivateUser, channel : discord.channel, message: str):
-        await user.CranCheck(channel)
+        await user.ClanCheck(channel)
         if user.clan is None: return
 
         try:
@@ -2128,9 +2128,9 @@ class PrivateMessage:
 
     @staticmethod
     def GetClanList(userid : int):
-        clanlist:List[Cran] = []
+        clanlist:List[Clan] = []
 
-        for clan in cranhash.values():
+        for clan in clanhash.values():
             if userid in clan.members:
                 clanlist.append(clan)
         return clanlist
@@ -2358,24 +2358,24 @@ class PrivateMessage:
 # 接続に必要なオブジェクトを生成
 client = discord.Client()
 
-cranhash: Dict[int, Cran] = {}
+clanhash: Dict[int, Clan] = {}
 
 # ギルドデータ読み込み
 files = glob.glob("./crandata/*.json")
 
 for file in files:
-    cranid = int (os.path.splitext(os.path.basename(file))[0])
-    if cranid != 0:
-        cran = Cran.Load(cranid)
-        cranhash[cranid] = cran
+    clanid = int (os.path.splitext(os.path.basename(file))[0])
+    if clanid != 0:
+        clan = Clan.Load(clanid)
+        clanhash[clanid] = clan
 
-def GetCran(guild, message) -> Cran:
-    global cranhash
-    g = cranhash.get(guild.id)
+def GetClan(guild, message) -> Clan:
+    global clanhash
+    g = clanhash.get(guild.id)
 
     if (g is None):
-        g = Cran(message.channel.id)
-        cranhash[guild.id] = g
+        g = Clan(message.channel.id)
+        clanhash[guild.id] = g
 
     if g.guild is None:
         g.guild = guild
@@ -2390,34 +2390,34 @@ async def loop():
     nowtime = now.strftime('%H:%M')
 
     if nowtime == '05:00':
-        for guildid, cran in cranhash.items():
+        for guildid, clan in clanhash.items():
             message = 'おはようございます\nメンバーの情報をリセットしました'
-            resetflag = True if cran.TotalSortie() == 0 else False
+            resetflag = True if clan.TotalSortie() == 0 else False
 
             if (nowdate == BATTLEPRESTART):
                 message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
-                cran.FullReset()
-                await cran.MemberRefresh()
+                clan.FullReset()
+                await clan.MemberRefresh()
                 resetflag = True
 
             if (nowdate == BATTLESTART):
                 message = 'おはようございます\nいよいよクランバトルの開始です。頑張りましょう。'
-                cran.FullReset()
+                clan.FullReset()
                 resetflag = True
 
             if (nowdate == BATTLEEND):
                 message = 'おはようございます\n今日がクランバトル最終日です。24時が終了時刻ですので早めに攻撃を終わらせましょう。'
                 resetflag = True
 
-            cran.Reset()
+            clan.Reset()
             if resetflag:
-                if cran.inputchannel is not None:
-                    await cran.inputchannel.send(message)
-                    await Output(cran, cran.Status())
+                if clan.inputchannel is not None:
+                    await clan.inputchannel.send(message)
+                    await Output(clan, clan.Status())
             else:
-                cran.lastmessage = None
+                clan.lastmessage = None
 
-            Cran.Save(cran, guildid)
+            Clan.Save(clan, guildid)
 
         for user in userhash.values():
             user.UsedClear()
@@ -2425,24 +2425,24 @@ async def loop():
         PrivateUser.SaveList(userhash)
 
     if nowtime == '23:59':
-        for cran in cranhash.values():
+        for clan in clanhash.values():
             if (nowdate == BATTLEEND):
-                if cran.inputchannel is not None:
+                if clan.inputchannel is not None:
                     message = 'クランバトル終了です。お疲れさまでした。'
-                    await cran.inputchannel.send(message)
+                    await clan.inputchannel.send(message)
     
     shtime = now + datetime.timedelta(minutes = -15)
-    for cran in cranhash.values():
-        for member in cran.members.values():
+    for clan in clanhash.values():
+        for member in clan.members.values():
             if (member.attacktime is not None and member.attacktime < shtime):
                 member.attacktime = None
 
-                if cran.inputchannel is not None:
+                if clan.inputchannel is not None:
                     message = '%s 凸結果の報告をお願いします' % member.mention
-                    await cran.inputchannel.send(message)
+                    await clan.inputchannel.send(message)
 
 
-def IsCranBattle():
+def IsClanBattle():
     return False
 
 
@@ -2453,10 +2453,10 @@ async def on_ready():
     print('ログインしました')
     Outlog(ERRFILE, "login.")
 
-    global cranhash
+    global clanhash
     global userhash
 
-    for guildid, clan in cranhash.items():
+    for guildid, clan in clanhash.items():
         if clan.guild is None:
             matchguild = [g for g in client.guilds if g.id == guildid]
             if len(matchguild) == 1:
@@ -2467,7 +2467,7 @@ async def on_ready():
 
     for user in userhash.values():
         if user.clan is None and user.guildid != 0:
-            user.clan = cranhash.get(user.guildid)
+            user.clan = clanhash.get(user.guildid)
             if user.clan is None:
                 print('[%d] not found' % user.guildid)
                 user.guildid = 0
@@ -2487,12 +2487,12 @@ async def on_message(message):
         if message.channel.name != inputchannel:
             return
 
-        cran = GetCran(message.guild, message)
-        result = await cran.on_message(message)
+        clan = GetClan(message.guild, message)
+        result = await clan.on_message(message)
 
         if (result):
-            cran.Save(cran, message.guild.id)
-            await Output(cran, cran.Status())
+            clan.Save(clan, message.guild.id)
+            await Output(clan, clan.Status())
         return
 
     global userhash
@@ -2513,48 +2513,48 @@ async def on_message(message):
 
 @client.event
 async def on_raw_message_delete(payload):
-    cran = cranhash.get(payload.guild_id)
+    clan = clanhash.get(payload.guild_id)
 
-    if cran is not None and cran.IsInput(payload.channel_id):
+    if clan is not None and clan.IsInput(payload.channel_id):
 
-        result = await cran.on_raw_message_delete(payload)
+        result = await clan.on_raw_message_delete(payload)
         if result:
-            cran.Save(cran, payload.guild_id)
-            await Output(cran, cran.Status())
+            clan.Save(clan, payload.guild_id)
+            await Output(clan, clan.Status())
 
 @client.event
 async def on_raw_reaction_add(payload):
-    cran = cranhash.get(payload.guild_id)
+    clan = clanhash.get(payload.guild_id)
 
-    if cran is not None:
-        result = await cran.on_raw_reaction_add(payload)
+    if clan is not None:
+        result = await clan.on_raw_reaction_add(payload)
         if result:
-            cran.Save(cran, payload.guild_id)
-            await Output(cran, cran.Status())
+            clan.Save(clan, payload.guild_id)
+            await Output(clan, clan.Status())
 
 @client.event
 async def on_raw_reaction_remove(payload):
 
-    cran = cranhash.get(payload.guild_id)
+    clan = clanhash.get(payload.guild_id)
 
-    if cran is not None and cran.IsInput(payload.channel_id):
+    if clan is not None and clan.IsInput(payload.channel_id):
 
-        result = await cran.on_raw_reaction_remove(payload)
+        result = await clan.on_raw_reaction_remove(payload)
         if result:
-            cran.Save(cran, payload.guild_id)
-            await Output(cran, cran.Status())
+            clan.Save(clan, payload.guild_id)
+            await Output(clan, clan.Status())
 
 @client.event
 async def on_member_remove(member):
     if member.bot: return
 
-    cran = cranhash.get(member.guild.id)
-    if (cran is None): return
+    clan = clanhash.get(member.guild.id)
+    if (clan is None): return
 
-    if member.id in cran.members:
-        del cran.members[member.id]
-        cran.Save(cran, member.guild.id)
-        await Output(cran, cran.Status())
+    if member.id in clan.members:
+        del clan.members[member.id]
+        clan.Save(clan, member.guild.id)
+        await Output(clan, clan.Status())
 
 @client.event
 async def on_guild_join(guild):
@@ -2562,26 +2562,26 @@ async def on_guild_join(guild):
 
 @client.event
 async def on_guild_remove(guild):
-    global cranhash
+    global clanhash
 
-    if guild.id in cranhash:
-        del cranhash[guild.id]
+    if guild.id in clanhash:
+        del clanhash[guild.id]
         try:
             os.remove('crandata/%d.json' % (guild.id))
         except FileNotFoundError:
             pass
 
-async def Output(cran, message):
-    if cran.outputchannel is not None:
-        if (cran.lastmessage is not None):
-            await cran.lastmessage.delete()
-            cran.lastmessage = None
+async def Output(clan, message):
+    if clan.outputchannel is not None:
+        if (clan.lastmessage is not None):
+            await clan.lastmessage.delete()
+            clan.lastmessage = None
 
-        if cran.outputchannel is not None:
+        if clan.outputchannel is not None:
             try:
-                cran.lastmessage = await cran.outputchannel.send(message)
+                clan.lastmessage = await clan.outputchannel.send(message)
             except discord.errors.Forbidden:
-                cran.outputchannel = None
+                clan.outputchannel = None
 
 def Outlog(filename, data):
     datetime_format = datetime.datetime.now()
