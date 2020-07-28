@@ -930,6 +930,8 @@ class Clan():
 
         self.admin = False
 
+        self.outputlock = 0
+
     def GetMember(self, author) -> ClanMember:
         member = self.members.get(author.id)
         if (member is None):
@@ -2600,15 +2602,24 @@ async def on_guild_remove(guild):
 
 async def Output(clan, message):
     if clan.outputchannel is not None:
-        if (clan.lastmessage is not None):
-            await clan.lastmessage.delete()
-            clan.lastmessage = None
+        if clan.outputlock == 1: return
+        try:
+            while clan.outputlock != 0:
+                await asyncio.sleep(1)
 
-        if clan.outputchannel is not None:
+            if clan.lastmessage is not None:
+                clan.outputlock = 1
+                await clan.lastmessage.delete()
+                clan.lastmessage = None
+
             try:
+                clan.outputlock = 2
                 clan.lastmessage = await clan.outputchannel.send(message)
             except discord.errors.Forbidden:
                 clan.outputchannel = None
+        finally:
+            clan.outputlock = 0
+
 
 def Outlog(filename, data):
     datetime_format = datetime.datetime.now()
