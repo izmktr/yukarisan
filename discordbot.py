@@ -1598,8 +1598,8 @@ class Clan():
             an = a.Overboss()
             bn = b.Overboss()
             if (an - bn) % BOSSNUMBER == 0: 
-                return bn - an
-            return (bn % BOSSNUMBER) - (an % BOSSNUMBER)
+                return an - bn
+            return (an % BOSSNUMBER) - (bn % BOSSNUMBER)
 
         overkilllist = sorted(oklist, key=cmp_to_key(Compare))
         oknum = len(overkilllist)
