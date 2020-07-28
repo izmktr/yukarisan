@@ -1622,6 +1622,8 @@ class Clan():
             if n % 1 == 0: return '%d' % n
             else: return '%0.1f' % n
 
+        s += '\n'
+
         s += '総攻撃数 %s回 (残り %s回 約%.1f周%s)\n' % (fout(attackcount), fout(restattack), restlap, nextstr)
 
         for i, c in enumerate(count):
@@ -2417,7 +2419,7 @@ async def loop():
     if nowtime == '05:00':
         for guildid, clan in clanhash.items():
             message = 'おはようございます\nメンバーの情報をリセットしました'
-            resetflag = True if clan.TotalSortie() == 0 else False
+            resetflag = True if clan.TotalSortie() != 0 else False
 
             if (nowdate == BATTLEPRESTART):
                 message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
