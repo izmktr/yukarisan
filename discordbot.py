@@ -1649,12 +1649,12 @@ class Clan():
         for mid, member in clan.members.items():
             dic['members'][mid] = member.Serialize()
 
-        with open('crandata/%d.json' % (clanid) , 'w') as a:
+        with open('clandata/%d.json' % (clanid) , 'w') as a:
             json.dump(dic, a , indent=4)
 
     @staticmethod
     def Load(clanid):
-        with open('crandata/%d.json' % (clanid)) as a:
+        with open('clandata/%d.json' % (clanid)) as a:
             mdic =  json.load(a)
 
             clan = Clan(mdic['channelid'])
@@ -2390,7 +2390,7 @@ client = discord.Client()
 clanhash: Dict[int, Clan] = {}
 
 # ギルドデータ読み込み
-files = glob.glob("./crandata/*.json")
+files = glob.glob("./clandata/*.json")
 
 for file in files:
     clanid = int (os.path.splitext(os.path.basename(file))[0])
@@ -2596,7 +2596,7 @@ async def on_guild_remove(guild):
     if guild.id in clanhash:
         del clanhash[guild.id]
         try:
-            os.remove('crandata/%d.json' % (guild.id))
+            os.remove('clandata/%d.json' % (guild.id))
         except FileNotFoundError:
             pass
 
