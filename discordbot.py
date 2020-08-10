@@ -1094,6 +1094,10 @@ class Clan():
             pass
         await channel.send('数値変換に失敗しました')
 
+    async def SettingReload(self, opt, channel):
+        GlobalStrage.Load()
+        await channel.send('リロードしました')
+
     async def on_message(self, message):
         member = self.GetMember(message.author)
         mark = u"\u2757"
@@ -1225,23 +1229,28 @@ class Clan():
 # 全体管理者コマンド 
         if self.admin and message.author.guild_permissions.administrator:
             opt = Command(message.content, 'bossname')
-            if (opt is not None):
+            if opt is not None:
                 await self.BossName(opt, message.channel)
                 return True
 
             opt = Command(message.content, 'term')
-            if (opt is not None):
+            if opt is not None:
                 await self.BattleTeam(opt, message.channel)
                 return True
 
             opt = Command(message.content, 'gachaadd')
-            if (opt is not None):
+            if opt is not None:
                 await self.GachaAdd(opt, message.channel)
                 return False
 
             opt = Command(message.content, 'gachadelete')
-            if (opt is not None):
+            if opt is not None:
                 await self.GachaDelete(opt, message.channel)
+                return False
+
+            opt = Command(message.content, 'settingreload')
+            if opt is not None:
+                await self.SettingReload(opt, message.channel)
                 return False
 
         return False

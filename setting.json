@@ -413,6 +413,14 @@
             "startdate": "2020/07/31 12:00:00",
             "gachatype": "l",
             "name": "\u30cf\u30c4\u30cd(\u30b5\u30de\u30fc)"
+        },
+        {
+            "startdate": "2020/08/10 12:00:00",
+            "gachatype": "p",
+            "name": [
+                "\u30a2\u30aa\u30a4(\u7de8\u5165\u751f)",
+                "\u30af\u30ed\u30a8"
+            ]
         }
     ],
     "BossName": [
