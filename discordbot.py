@@ -269,13 +269,10 @@ class Gacha():
         datetime_format = datetime.datetime.now()
         datestr = datetime_format.strftime("%Y/%m/%d %H:%M:%S")  # 2017/11/12 09:55:28
 
-        if self.limitdate == None:
-            if GachaData[-1].startdate <= datestr:
-                return self.gachabox
-        elif datestr < self.limitdate:
+        if datestr < self.limitdate or self.limitdate == GachaData[-1].startdate:
             return self.gachabox
 
-        self.limitdate = None
+        self.limitdate = GachaData[-1].startdate
         pickup = None
         self.gachabox : List[GachaRate] = [
             GachaRate(0.0, 3, []),

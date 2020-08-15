@@ -421,6 +421,16 @@
                 "\u30a2\u30aa\u30a4(\u7de8\u5165\u751f)",
                 "\u30af\u30ed\u30a8"
             ]
+        },
+        {
+            "startdate": "2020/08/15 14:59:59",
+            "gachatype": "3",
+            "name": "\u30b8\u30e5\u30f3(\u30b5\u30de\u30fc)"
+        },
+        {
+            "startdate": "2020/08/15 15:00:00",
+            "gachatype": "d",
+            "name": "\u30b8\u30e5\u30f3(\u30b5\u30de\u30fc)"
         }
     ],
     "BossName": [
