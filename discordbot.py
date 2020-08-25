@@ -2448,7 +2448,7 @@ async def loop():
             if resetflag:
                 if clan.inputchannel is not None:
                     await clan.inputchannel.send(message)
-                    await Output(clan, clan.Status())
+                await Output(clan, clan.Status())
             else:
                 clan.lastmessage = None
 
