@@ -956,11 +956,11 @@ class Clan():
         return None
 
     def FullReset(self):
+        self.Reset()
         self.bosscount = 0
         self.beforesortie = 0
         self.lap = {0 : 0.0}
         self.defeatlist.clear()
-        self.Reset()
 
     def Reset(self):
         self.beforesortie = self.TotalSortie()
