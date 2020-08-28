@@ -1635,8 +1635,9 @@ class Clan():
         s += '総攻撃数 %s回 (残り %s回 約%.1f周%s)\n' % (fout(attackcount), fout(restattack), restlap, nextstr)
 
         for i, c in enumerate(count):
-            s += '%d回目 %d人\n' % (i, len(c))
-            s += '  '.join([m.AttackName() for m in c]) + '\n'
+            if 0 < len(c):
+                s += '%d回目 %d人\n' % (i, len(c))
+                s += '  '.join([m.AttackName() for m in c]) + '\n'
         
         return s
 
