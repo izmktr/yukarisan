@@ -2622,7 +2622,10 @@ async def Output(clan, message):
 
             if clan.lastmessage is not None:
                 clan.outputlock = 1
-                await clan.lastmessage.delete()
+                try:
+                    await clan.lastmessage.delete()
+                except discord.errors.NotFound:
+                    pass
                 clan.lastmessage = None
 
             try:
