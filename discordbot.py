@@ -82,17 +82,17 @@ BOSSNUMBER = len(BossName)
 
 class GachaRate():
     def __init__(self, rate, star, namelist):
-        self.rate = rate
-        self.star = star
-        self.namelist = namelist
+        self.rate : float = rate
+        self.star : int = star
+        self.namelist : List[str] = namelist
 
 class PrizeRate():
     def __init__(self, rate, star, memorial, stone, heart):
-        self.rate = rate
-        self.star = star
-        self.memorial = memorial
-        self.stone = stone
-        self.heart = heart
+        self.rate : float = rate
+        self.star : int = star
+        self.memorial : int = memorial
+        self.stone : int = stone
+        self.heart : int = heart
     
     def Name(self):
         star = 7 - self.star 
@@ -261,18 +261,24 @@ class Gacha():
     @staticmethod
     def AppendList(namelist, name):
         if type(name) is list:
-            namelist.extend(name)
+            for n in name:
+                if n not in namelist:
+                   namelist.append(n)
         else:
-            namelist.append(name)
+            if name not in namelist:
+                namelist.append(name)
 
     def GetBoxData(self) -> List[GachaRate]:
         datetime_format = datetime.datetime.now()
         datestr = datetime_format.strftime("%Y/%m/%d %H:%M:%S")  # 2017/11/12 09:55:28
 
-        if datestr < self.limitdate or self.limitdate == GachaData[-1].startdate:
+        if self.limitdate is None:
+            if GachaData[-1].startdate <= datestr:
+                return self.gachabox
+        elif datestr < self.limitdate:
             return self.gachabox
 
-        self.limitdate = GachaData[-1].startdate
+        self.limitdate = None
         pickup = None
         self.gachabox : List[GachaRate] = [
             GachaRate(0.0, 3, []),
@@ -784,10 +790,10 @@ class ClanMember():
 
     def Serialize(self):
         ret = {}
-        ignore = ['attacktime', 'attackmessage']
+        selializemember = ['attack', 'name', 'taskkill', 'history', 'boss', 'notice', 'gacha']
 
         for key, value in self.__dict__.items():
-            if not key in ignore:
+            if key in selializemember:
                 ret[key] = value
 
         return ret
@@ -1052,9 +1058,9 @@ class Clan():
         gtype = opt[0]
         date = opt[1:20]
         name = opt[20:]
-        mes = '%s [%s] [%s]' % (gtype, date, name)
+        mes = '%s [%s] [%s]' % (Gacha.GachaType(gtype), date, name)
 
-        if gtype not in '3lpf':
+        if gtype not in '123dlpf':
             await channel.send(mes + ' ガチャタイプが不正です')
             return
 
