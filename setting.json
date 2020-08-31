@@ -439,6 +439,11 @@
                 "\u30bf\u30de\u30ad(\u30b5\u30de\u30fc)",
                 "\u30b9\u30ba\u30e1(\u30b5\u30de\u30fc)"
             ]
+        },
+        {
+            "startdate": "2020/08/31 12:00:00",
+            "gachatype": "f",
+            "name": "\u30e9\u30d3\u30ea\u30b9\u30bf"
         }
     ],
     "BossName": [
