@@ -660,6 +660,7 @@ class ClanMember():
         self.mention = ''
         self.gacha = 0
         self.attackmessage: Optional[discord.Message] = None
+        self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat):
         self.history.append(
@@ -814,6 +815,9 @@ class ClanMember():
 
     def dayfinish(self):
         return self.SortieCount() == MAX_SORITE
+    
+    def UpdateActive(self):
+        self.lastactive = datetime.datetime.now()
 
     async def Gacha(self, channel):
         self.gacha += 1
