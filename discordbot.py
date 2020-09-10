@@ -19,9 +19,6 @@ BATTLEPRESTART = '06/24'
 BATTLESTART = '06/25'
 BATTLEEND = '06/29'
 
-CmdAttack = ['凸', 'a']
-CmdTaskkill = ['タスキル', 'taskkill']
-
 LevelUpLap = [4, 11, 35]
 BossHpData = [
     [   [600, 1.2], [800, 1.2], [1000, 1.3], [1200, 1.4], [1500, 1.5]   ],
@@ -887,6 +884,43 @@ class ClanMember():
             mes += '%s:%d\n' % (name, count)
         
         await channel.send(mes)
+
+class DamageControl():
+
+    def __init__(self, channel, remainhp):
+        self.channel = channel
+        self.lastmessage = None
+        self.remainhp = remainhp
+        self.members : Dict[ClanMember, int] = {}
+
+    def RemainHp(self, hp : int):
+        self.remainhp = hp
+
+    def Damage(self, member: ClanMember, damage : int):
+        self.members[member] = damage
+
+    def Print(self):
+        mes = ''
+
+        return mes
+
+    async def SendResult(self):
+        await self.SendMessage(self.Print())
+
+    async def SendFinish(self):
+        await self.SendMessage('討伐お疲れ様です')
+        self.lastmessage = None
+
+    async def SendMessage(self, mes):
+
+        try:
+            if self.lastmessage is not None:
+                await self.lastmessage.delete()
+        except discord.errors.NotFound:
+            pass
+
+        self.lastmessage = await self.channel.send(mes)
+
    
 class Clan():
     numbermarks = [
@@ -920,6 +954,7 @@ class Clan():
         "\N{DIGIT ZERO}\N{COMBINING ENCLOSING KEYCAP}", # type: ignore
         u"\u274C",
     ]
+    taskkillmark = u"\u2757"
 
     def __init__(self, channelid : int):
         self.members: Dict[int, ClanMember] = {}
@@ -935,9 +970,40 @@ class Clan():
         self.inputchannel = None
         self.outputchannel = None
 
+        self.damagecontrol = None
+
         self.admin = False
 
         self.outputlock = 0
+
+        self.commandlist = self.FuncMap()
+
+    def FuncMap(self):
+        return [
+            (['a', '凸'], self.Attack),
+            (['taskkill', 'タスキル'], self.TaskKill),
+            (['memo', 'メモ'], self.Memo),
+            (['prevboss'], self.PrevBoss),
+            (['nextboss'], self.NextBoss),
+            (['notice', '通知'], self.Notice),
+            (['refresh'], self.Refresh),
+            (['reset'], self.Reset),
+            (['history'], self.History),
+            (['gachaadd'], self.GachaAdd),
+            (['gachadelete'], self.GachaDelete),
+            (['gachalist'], self.GachaList),
+            (['gacharate'], self.GachaRate),
+            (['gacha10000'], self.Gacha10000),
+            (['gacha', 'ガチャ'], self.Gacha),
+            (['defeatlog'], self.DefeatLog),
+            (['score'], self.Score),
+            (['settingreload'], self.SettingReload),
+            (['delete'], self.MemberDelete),
+            (['daylyreset'], self.DailyReset),
+            (['monthlyreset'], self.MonthlyReset),
+            (['bossname'], self.BossName),
+            (['term'], self.Term),
+        ]
 
     def GetMember(self, author) -> ClanMember:
         member = self.members.get(author.id)
@@ -1049,16 +1115,216 @@ class Clan():
 
         if self.inputchannel is not None:
             await self.inputchannel.send(mes)
-
-    def ScoreCalc(self, opt):
-        try:
-            score = int(opt)
-            return ClanScore.Calc(score)
-
-        except ValueError:
-            return None
     
-    async def GachaAdd(self, opt, channel):
+    def CheckOptionNone(self, opt):
+        if 0 < len(opt): 
+            raise ValueError
+        return True
+
+    def CheckInputChannel(self, message):
+        if self.inputchannel is None or message.channel != self.inputchannel:
+            return True
+        return False
+
+    def CheckNotAdministrator(self, message):
+        if message.author.guild_permissions.administrator:
+            return False
+        return True
+
+    def CheckNotMasterAdministrator(self, clan, message):
+        if clan.Admin:
+            return False
+        if message.author.guild_permissions.administrator:
+            return False
+        return True
+
+    async def Attack(self, message, member, opt):
+        if self.CheckInputChannel(message):
+            await message.channel.send('%s のチャンネルで発言してください' % inputchannel)
+            return 
+
+        tmpattack = member.attackmessage if member.attack else None
+
+        member.Attack(self)
+
+        if (member.taskkill != 0):
+            await message.add_reaction(self.taskkillmark)
+
+        member.attackmessage = message
+        await self.AddReaction(message, member.IsOverkill())
+
+        if tmpattack is not None:
+            await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
+
+    async def TaskKill(self, message, member, opt):
+        member.taskkill = message.id
+        await message.add_reaction(self.taskkillmark)
+        return True
+
+    async def PrevBoss(self, message, member, opt):
+        await self.ChangeBoss(message.channel, -1)
+        return True
+
+    async def NextBoss(self, message, member, opt):
+        await self.ChangeBoss(message.channel, 1)
+        return True
+
+    async def Memo(self, message, member, opt):
+        member.SetMemo(opt)
+        return True
+
+    async def Notice(self, message, member, opt):
+        await self.SetNotice(member, message, opt)
+        return False
+
+    async def Refresh(self, message, member, opt):
+        await self.MemberRefresh()
+        return True
+
+    async def CmdReset(self, message, member, opt):
+        member.Reset()
+        return True
+
+    async def History(self, message, member, opt):
+        if (opt == ''):
+            await member.History(message)
+        else:
+            fmember = self.FindMember(opt)
+            if fmember is not None:
+                await fmember.History(message)
+            else:
+                await message.channel.send('メンバーがいません')
+        return False
+
+    async def Gacha(self, message, member, opt):
+        self.CheckOptionNone(opt)
+
+        if (IsClanBattle()):
+            return False
+        else:
+            await member.Gacha(message.channel)
+            return False
+
+    async def Gacha10000(self, message, member, opt):
+        if (IsClanBattle()):
+            return False
+        else:
+            await member.Gacha10000(message.channel)
+            return False
+
+    async def DefeatLog(self, message, member, opt):
+        text = ''
+        for n in self.defeatlist:
+            text += n + '\n'
+
+        with StringIO(text) as bs:
+            await message.channel.send(file=discord.File(bs, 'defeatlog.txt'))
+        return False
+
+    async def GachaList(self, message, member, opt):
+        await message.channel.send(Gacha.GachaScheduleData())
+        return False
+
+    async def GachaRate(self, message, member, opt):
+        await message.channel.send(gacha.ToString())
+        return False
+
+    async def Score(self, message, member, opt):
+        result = self.ScoreCalc(opt)
+        if (result is not None):
+            await message.channel.send('%d-%d %s (残りHP %s %%)' % 
+            (result.lap, result.bossindex + 1, BossName[result.bossindex], result.hprate))
+            return True
+        else:
+            await message.channel.send('計算できませんでした')
+            return False
+
+    async def SettingReload(self, message, member, opt):
+        channel = message.channel
+
+        GlobalStrage.Load()
+        await channel.send('リロードしました')
+        return False
+
+    async def MemberDelete(self, message, member, opt):
+        if not message.author.guild_permissions.administrator:
+            return False
+
+        result = self.DeleteMember(opt)
+        if (result is not None):
+            await message.channel.send('%s を消しました' % result.name)
+            return True
+        else:
+            await message.channel.send('メンバーがいません')
+            return False
+
+    async def DailyReset(self, message, member, opt):
+        if not message.author.guild_permissions.administrator:
+            return False
+
+        self.Reset()
+        return True
+
+    async def MonthlyReset(self, message, member, opt):
+        if not message.author.guild_permissions.administrator:
+            return False
+
+        self.FullReset()
+        return True
+
+    async def BossName(self, message, member, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+        channel = message.channel
+
+        namearray = opt.split(',')
+
+        if BOSSNUMBER != len(namearray):
+            await channel.send('usage) bossname boss1,boss2,boss3,boss4,boss5')
+            return
+        
+        global BossName
+        BossName = namearray
+        GlobalStrage.Save()
+
+        await channel.send('ボスを更新しました'+','.join(BossName))
+        return True
+
+    async def Term(self, message, member, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+        channel = message.channel
+
+        team = opt.split(',')
+
+        if len(team) != 2:
+            await channel.send('usage) team 1/20,1/30')
+            return
+
+        global BATTLEPRESTART
+        global BATTLESTART
+        global BATTLEEND
+
+        try:
+            start = datetime.datetime.strptime(team[0], '%m/%d')
+            end = datetime.datetime.strptime(team[1], '%m/%d')
+
+            BATTLEPRESTART = (start + datetime.timedelta(days = -1)).strftime('%m/%d')
+            BATTLESTART = start.strftime('%m/%d')
+            BATTLEEND = end.strftime('%m/%d')
+
+            GlobalStrage.Save()
+            await channel.send('クラバト期間は%s-%sです' % (BATTLESTART, BATTLEEND))
+        except ValueError:
+            await channel.send('日付エラーです')
+        return True
+
+    async def GachaAdd(self, message, member, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        channel = message.channel
+
         gtype = opt[0]
         date = opt[1:20]
         name = opt[20:]
@@ -1081,14 +1347,11 @@ class Clan():
         GlobalStrage.Save()
 
         await channel.send(mes)
-    
-    def FindChannel(self, guild : discord.guild, name : str) -> Optional[discord.TextChannel]:
-        outchannel = [channel for channel in guild.channels if channel.name == name]
-        if 0 < len(outchannel):
-            return client.get_channel(outchannel[0].id)
-        return None
+        return False
 
-    async def GachaDelete(self, opt, channel):
+    async def GachaDelete(self, message, member, opt):
+        channel = message.channel
+
         global GachaData
         try:
             gindex = int(opt)
@@ -1100,165 +1363,60 @@ class Clan():
         except ValueError:
             pass
         await channel.send('数値変換に失敗しました')
+        return False
 
-    async def SettingReload(self, opt, channel):
-        GlobalStrage.Load()
-        await channel.send('リロードしました')
+    async def DamageControl(self, message, _member, opt):
+        if message.channel.type == discord.ChannelType.private:
+            await message.channel.send('このチャンネルでは使えません')
+            return
+
+        try:
+            remainhp = int(opt)
+        except ValueError:
+            remainhp = 2000
+
+        if self.damagecontrol is None:
+            self.damagecontrol = DamageControl(message.channel, remainhp)
+        else:
+            self.damagecontrol.RemainHp(remainhp)
+
+    def ScoreCalc(self, opt):
+        try:
+            score = int(opt)
+            return ClanScore.Calc(score)
+
+        except ValueError:
+            return None
+    
+    def FindChannel(self, guild : discord.guild, name : str) -> Optional[discord.TextChannel]:
+        outchannel = [channel for channel in guild.channels if channel.name == name]
+        if 0 < len(outchannel):
+            return client.get_channel(outchannel[0].id)
+        return None
 
     async def on_message(self, message):
         member = self.GetMember(message.author)
-        mark = u"\u2757"
 
-        self.inputchannel = message.channel
-        
-        if self.outputchannel is None:
-            self.outputchannel = self.FindChannel(message.guild, outputchannel)
+        content = re.sub('<[^>]*>', '', message.content).strip()
+        print(content)
+
+        if message.channel.name == inputchannel:
+            if self.inputchannel is None:
+                self.inputchannel = message.channel
+            
             if self.outputchannel is None:
-                await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
+                self.outputchannel = self.FindChannel(message.guild, outputchannel)
+                if self.outputchannel is None:
+                    await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
-        if (message.content in CmdAttack):
-            tmpattack = member.attackmessage if member.attack else None
-
-            member.Attack(self)
-
-            if (member.taskkill != 0):
-                await message.add_reaction(mark)
-
-            member.attackmessage = message
-            await self.AddReaction(message, member.IsOverkill())
-
-            if tmpattack is not None:
-                await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
-            return True
-        
-        if (message.content in CmdTaskkill):
-            member.taskkill = message.id
-
-            await message.add_reaction(mark)
-            return True
-
-        if (message.content == 'prevboss'):
-            await self.ChangeBoss(message.channel, -1)
-            return True
-
-        if (message.content == 'nextboss'):
-            await self.ChangeBoss(message.channel, 1)
-            return True
-
-        opt = Command(message.content, ['memo', 'メモ'])
-        if (opt is not None):
-            member.SetMemo(opt)
-            return True
-
-        opt = Command(message.content, ['notice', '通知'])
-        if (opt is not None ):
-            await self.SetNotice(member, message, opt)
-            return False
-
-        if (message.content == 'refresh'):
-            await self.MemberRefresh()
-            return True
-
-        if (message.content == 'reset'):
-            member.Reset()
-            return True
-
-        opt = Command(message.content, 'history')
-        if (opt is not None):
-            if (opt == ''):
-                await member.History(message)
-            else:
-                fmember = self.FindMember(opt)
-                if fmember is not None:
-                    await fmember.History(message)
-                else:
-                    await message.channel.send('メンバーがいません')
-            return False
-
-        if (message.content in ['gacha', 'ガチャ']):
-            if (IsClanBattle()):
-                return False
-            else:
-                await member.Gacha(message.channel)
-                return False
-
-        if (message.content in ['gacha10000']):
-            if (IsClanBattle()):
-                return False
-            else:
-                await member.Gacha10000(message.channel)
-                return False
-
-        if message.content in ['defeatlog']:
-            await self.DefeatLog(message.channel)
-            return False
-
-        opt = Command(message.content, 'gachalist')
-        if (opt is not None):
-            await message.channel.send(Gacha.GachaScheduleData())
-            return False
-
-        if (message.content in ['gdata']):
-            await message.channel.send(gacha.ToString())
-            return False
-
-        opt = Command(message.content, 'score')
-        if (opt is not None):
-            result = self.ScoreCalc(opt)
-            if (result is not None):
-                await message.channel.send('%d-%d %s (残りHP %s %%)' % 
-                (result.lap, result.bossindex + 1, BossName[result.bossindex], result.hprate))
-                return True
-            else:
-                await message.channel.send('計算できませんでした')
-                return False
-
-# 管理者コマンド 
-        if message.author.guild_permissions.administrator:
-            opt = Command(message.content, 'delete')
-            if (opt is not None):
-                result = self.DeleteMember(opt)
-                if (result is not None):
-                    await message.channel.send('%s を消しました' % result.name)
-                    return True
-                else:
-                    await message.channel.send('メンバーがいません')
-                    return False
-
-            if (message.content == 'daylyreset'):
-                self.Reset()
-                return True
-
-            if (message.content == 'monthlyreset'):
-                self.FullReset()
-                return True
-
-# 全体管理者コマンド 
-        if self.admin and message.author.guild_permissions.administrator:
-            opt = Command(message.content, 'bossname')
-            if opt is not None:
-                await self.BossName(opt, message.channel)
-                return True
-
-            opt = Command(message.content, 'term')
-            if opt is not None:
-                await self.BattleTeam(opt, message.channel)
-                return True
-
-            opt = Command(message.content, 'gachaadd')
-            if opt is not None:
-                await self.GachaAdd(opt, message.channel)
-                return False
-
-            opt = Command(message.content, 'gachadelete')
-            if opt is not None:
-                await self.GachaDelete(opt, message.channel)
-                return False
-
-            opt = Command(message.content, 'settingreload')
-            if opt is not None:
-                await self.SettingReload(opt, message.channel)
-                return False
+        for cmdtuple in self.commandlist:
+            for cmd in cmdtuple[0]:
+                opt = Command(content, cmd)
+                if opt is not None:
+                    try:
+                        return await cmdtuple[1](message, member, opt)
+                    except ValueError:
+                        pass
 
         return False
 
@@ -1325,51 +1483,6 @@ class Clan():
             if (notice is not None):
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
     
-    async def BossName(self, opt, channel):
-        namearray = opt.split(',')
-
-        if BOSSNUMBER != len(namearray):
-            await channel.send('usage) bossname boss1,boss2,boss3,boss4,boss5')
-            return
-        
-        global BossName
-        BossName = namearray
-        GlobalStrage.Save()
-
-        await channel.send('ボスを更新しました'+','.join(BossName))
-
-    async def BattleTeam(self, opt, channel):
-        team = opt.split(',')
-
-        if len(team) != 2:
-            await channel.send('usage) team 1/20,1/30')
-            return
-
-        global BATTLEPRESTART
-        global BATTLESTART
-        global BATTLEEND
-
-        try:
-            start = datetime.datetime.strptime(team[0], '%m/%d')
-            end = datetime.datetime.strptime(team[1], '%m/%d')
-
-            BATTLEPRESTART = (start + datetime.timedelta(days = -1)).strftime('%m/%d')
-            BATTLESTART = start.strftime('%m/%d')
-            BATTLEEND = end.strftime('%m/%d')
-
-            GlobalStrage.Save()
-            await channel.send('クラバト期間は%s-%sです' % (BATTLESTART, BATTLEEND))
-        except ValueError:
-            await channel.send('日付エラーです')
-
-    async def DefeatLog(self, channel):
-        text = ''
-        for n in self.defeatlist:
-            text += n + '\n'
-
-        with StringIO(text) as bs:
-            await channel.send(file=discord.File(bs, 'defeatlog.txt'))
-
     async def on_reaction_add(self, reaction, user):
         idx = self.emojiindex(reaction.emoji)
         Outlog(ERRFILE, "on_reaction_add %s [%d]" % 
@@ -1481,7 +1594,7 @@ class Clan():
             Outlog(ERRFILE, message.author.display_name + " " + v)
             return False
 
-        if (message.content in CmdAttack):
+        if (message.content in ['a', '凸']):
             if(idx == 9):
                 member.Attack(self, False)
                 await self.AddReaction(message, member.IsOverkill())
@@ -2530,7 +2643,7 @@ async def on_message(message):
     if message.author.bot:
         return
     if message.channel.type == discord.ChannelType.text:
-        if message.channel.name != inputchannel:
+        if message.channel.name != inputchannel and message.guild.me not in message.mentions :
             return
 
         clan = GetClan(message.guild, message)
