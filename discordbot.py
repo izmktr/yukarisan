@@ -101,6 +101,11 @@ class Princess():
     def __init__(self, name, star):
         self.name = name
         self.star = star
+    
+    def starstr(self):
+        if 3 <= self.star:
+            return "[★%d]" % self.star
+        return "★%d" % self.star
 
 class GachaSchedule:
     def __init__(self, startdate, gachatype, name):
@@ -846,7 +851,7 @@ class ClanMember():
             await asyncio.sleep(5)
             await post.delete()
 
-        mes = '\n'.join(['★%d %s' % (p.star, p.name) for p in result])
+        mes = '\n'.join(['%s %s' % (p.starstr(), p.name) for p in result])
 
         if gacha.prize:
             resultprize : List[PrizeRate] = []
