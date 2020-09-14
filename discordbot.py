@@ -1139,6 +1139,8 @@ class Clan():
         return True
 
     async def Attack(self, message, member, opt):
+        self.CheckOptionNone(opt)
+
         if self.CheckInputChannel(message):
             await message.channel.send('%s のチャンネルで発言してください' % inputchannel)
             return 
@@ -1398,7 +1400,6 @@ class Clan():
         member = self.GetMember(message.author)
 
         content = re.sub('<[^>]*>', '', message.content).strip()
-        print(content)
 
         if message.channel.name == inputchannel:
             if self.inputchannel is None:
