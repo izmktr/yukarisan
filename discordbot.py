@@ -193,7 +193,7 @@ class Gacha():
             'マヒル(レンジャー)','リノ(ワンダー)','イノリ', 'ナナカ(サマー)']
     s2name = ['カオリ','ナナカ','エリコ','シオリ','ミミ','タマキ','マツリ','スズナ','ミヤコ','クウカ',
             'アカリ','ミツキ','ツムギ','ミサト','アヤネ','シノブ','チカ','ミフユ','リン','ユキ','マヒル']
-    s1name = ['レイ','ヨリ','ヒヨリ','リマ','ユカリ','クルミ','ミソギ','スズメ','アユミ','アオイ']
+    s1name = ['レイ','ヨリ','ヒヨリ','リマ','ユカリ','クルミ','ミソギ','スズメ','アユミ','アオイ','ミサキ']
 
     limited = ['ユイ(ニューイヤー)','ヒヨリ(ニューイヤー)','キャル(ニューイヤー)','コッコロ(ニューイヤー)',
             'シズル(バレンタイン)','ペコリーヌ(サマー)','スズメ(サマー)','タマキ(サマー)','キャル(サマー)',
@@ -270,6 +270,10 @@ class Gacha():
             if name not in namelist:
                 namelist.append(name)
 
+    def BoxReset(self):
+        self.gachabox = []
+        self.limitdate = '2000/01/01 00:00:00'
+
     def GetBoxData(self) -> List[GachaRate]:
         datetime_format = datetime.datetime.now()
         datestr = datetime_format.strftime("%Y/%m/%d %H:%M:%S")  # 2017/11/12 09:55:28
@@ -332,7 +336,7 @@ class Gacha():
         self.GetBoxData()
 
         message = ''
-        message += '%s %s\n' % (self.gachatype, GachaData[-1].startdate)
+        message += '%s %s\n' % (self.GachaType(self.gachatype), GachaData[-1].startdate)
 
         for rate in self.gachabox:
             unitrate = 0.0 if len(rate.namelist) <= 0 else rate.rate / len(rate.namelist)
@@ -1250,6 +1254,7 @@ class Clan():
         channel = message.channel
 
         GlobalStrage.Load()
+        gacha.BoxReset()
         await channel.send('リロードしました')
         return False
 
