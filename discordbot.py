@@ -260,6 +260,19 @@ class Gacha():
         for i in range(len(self.gachabox[1].namelist)):
             self.gachabox[1].namelist[i] += ' PriFes!'
 
+    def FindPrincess(self, name):
+        if len(self.gachabox) == 0:
+            self.GetBoxData()
+        
+        if name in self.limited: return 'l'
+        if name in self.gachabox[0].namelist: return self.gachatype
+        if name in self.gachabox[1].namelist: return 'f'
+        if name in self.gachabox[2].namelist: return '3'
+        if name in self.gachabox[3].namelist: return '2'
+        if name in self.gachabox[4].namelist: return '1'
+
+        return '0'
+
     @staticmethod
     def AppendList(namelist, name):
         if type(name) is list:
@@ -303,6 +316,8 @@ class Gacha():
             n = self.typetoindex(m.gachatype)
             if 0 < n:
                 self.AppendList(self.gachabox[n].namelist, m.name)
+            else:
+                self.AppendList(self.limited, m.name)
 
         self.PickUpDelete(pickup.name)
         self.AppendList(self.gachabox[0].namelist, pickup.name)
@@ -1353,6 +1368,17 @@ class Clan():
         namearray = name.split(',')
         if 2 <= len(namearray):
             name = namearray
+
+        for nitem in namearray:
+            p = gacha.FindPrincess(nitem)
+            if gtype == '3' and p not in '0':
+                mes += '\n警告：%s は新規ではありません' % nitem
+            if gtype == 'f' and p not in 'f0':
+                mes += '\n警告：%s はプリフェス以外で登録されています' % nitem
+            if gtype == 'l' and p not in 'l0':
+                mes += '\n警告：%s は限定以外で登録されています' % nitem
+            if gtype == 'p' and p not in 'l321':
+                mes += '\n警告：%s は未登録かフェス限定のキャラです' % nitem
 
         global GachaData
         GachaData.append(GachaSchedule(date, gtype, name))
