@@ -1146,8 +1146,9 @@ class Clan():
         return True
 
     def CheckInputChannel(self, message):
-        if self.inputchannel is None or message.channel != self.inputchannel:
+        if self.inputchannel is None or message.channel.name != inputchannel:
             return True
+            
         return False
 
     def CheckNotAdministrator(self, message):
@@ -2686,7 +2687,7 @@ async def on_message(message):
         clan = GetClan(message.guild, message)
         result = await clan.on_message(message)
 
-        if (result):
+        if result:
             clan.Save(clan, message.guild.id)
             await Output(clan, clan.Status())
         return
