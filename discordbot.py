@@ -65,7 +65,7 @@ import os
 import re
 import codecs
 import random
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from io import StringIO
 from typing import Sequence, TypeVar
 from functools import cmp_to_key
@@ -911,29 +911,104 @@ class ClanMember():
 
 class DamageControl():
 
-    def __init__(self, channel, remainhp):
-        self.channel = channel
+    def __init__(self):
+        self.active = False
         self.lastmessage = None
-        self.remainhp = remainhp
+        self.channel = None
+        self.remainhp = 0
         self.members : Dict[ClanMember, int] = {}
 
+    def SetChannel(self, channel):
+        self.channel = channel
+
     def RemainHp(self, hp : int):
+        self.active = True
         self.remainhp = hp
 
-    def Damage(self, member: ClanMember, damage : int):
+    def Damage(self, member : ClanMember, damage : int):
         self.members[member] = damage
+
+    async def Remove(self, member : ClanMember):
+        if not self.active: return
+
+        if member in self.members:
+            del self.members[member]
+            await self.SendResult()
+
+    async def Injure(self, member : ClanMember):
+        if not self.active: return
+        if member in self.members:
+            self.remainhp -= self.members[member]
+            if self.remainhp < 0 : self.remainhp = 0
+
+            del self.members[member]
+            await self.SendResult()
+
+
+    @staticmethod
+    def OverTime(remainhp : int, damage : int, overkill : bool):
+        if overkill: return 0
+
+        max = 90
+        bonus = 20
+
+        if damage <= 0: return 0
+
+        d = max + 1 - (max * remainhp // damage) + bonus
+        if max < d: return max
+        return d
+
+    def DefeatInfomation(self, slist : list, member : Tuple[ClanMember, int], limit = 3):
+        result = []
+        thp = self.remainhp - member[1]
+
+        i = 0
+        for s in slist:
+            if member != s and thp < s[1]:
+                if not member[0].IsOverkill() and s[0].IsOverkill(): continue
+
+                result.append( (s[0].name, self.OverTime(thp, s[1], s[0].IsOverkill() )) )
+                i += 1
+                if limit <= i: break
+
+        return result
 
     def Print(self):
         mes = ''
 
+        mes += '残りHP %d' % self.remainhp
+
+        sorted = [(key, value) for key, value in self.members.items() if key.IsOverkill()]
+        sorted.sort(key = lambda x:x[1], reverse=True)
+
+        normalsorted = [(key, value) for key, value in self.members.items() if not key.IsOverkill()]
+        normalsorted.sort(key = lambda x:x[1], reverse=True)
+
+        sorted.extend(normalsorted)
+
+        for m in sorted:
+            mes += '\n%s%s:%d' % (m[0].name, '[0]' if m[0].IsOverkill() else '', m[1])
+            if self.remainhp <= m[1]:
+                mes += ' %d秒' % (self.OverTime(self.remainhp, m[1], m[0].IsOverkill()))
+            else :
+                dinfo = self.DefeatInfomation(sorted, m)
+                mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
+
         return mes
 
     async def SendResult(self):
+        if not self.active: return
+        
         await self.SendMessage(self.Print())
 
     async def SendFinish(self):
+        if not self.active: return
+
         await self.SendMessage('討伐お疲れ様です')
         self.lastmessage = None
+        self.remainhp = 0
+        self.active = False
+        self.members = {}
 
     async def SendMessage(self, mes):
 
@@ -994,7 +1069,7 @@ class Clan():
         self.inputchannel = None
         self.outputchannel = None
 
-        self.damagecontrol = None
+        self.damagecontrol = DamageControl()
 
         self.admin = False
 
@@ -1027,6 +1102,9 @@ class Clan():
             (['monthlyreset'], self.MonthlyReset),
             (['bossname'], self.BossName),
             (['term'], self.Term),
+            (['remain','残り'], self.Remain),
+            (['damage','ダメ','ダメージ'], self.Damage),
+            (['pd'], self.PhantomDamage),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1404,7 +1482,7 @@ class Clan():
         await channel.send('数値変換に失敗しました')
         return False
 
-    async def DamageControl(self, message, _member, opt):
+    async def Remain(self, message, member, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
             return
@@ -1414,10 +1492,53 @@ class Clan():
         except ValueError:
             remainhp = 2000
 
-        if self.damagecontrol is None:
-            self.damagecontrol = DamageControl(message.channel, remainhp)
-        else:
-            self.damagecontrol.RemainHp(remainhp)
+        self.damagecontrol.SetChannel(message.channel)
+        self.damagecontrol.RemainHp(remainhp)
+        await self.damagecontrol.SendResult()
+
+    async def Damage(self, message, member, opt):
+        if message.channel.type == discord.ChannelType.private:
+            await message.channel.send('このチャンネルでは使えません')
+            return
+        
+        try:
+            damage = int(opt)
+        except ValueError:
+            damage = 0
+
+        if not self.damagecontrol.active:
+            await message.channel.send('ダメコンを行っていません')
+            return 
+        self.damagecontrol.Damage(member, damage)
+        await self.damagecontrol.SendResult()
+
+    async def PhantomDamage(self, message, member, opt):
+        if message.channel.type == discord.ChannelType.private:
+            await message.channel.send('このチャンネルでは使えません')
+            return
+        
+        try:
+            sp = opt.split(' ')
+            damage = int(sp[0])
+            m = int(sp[1])
+        except ValueError:
+            damage = 0
+            m = 0
+
+        if not self.damagecontrol.active:
+            await message.channel.send('ダメコンを行っていません')
+            return 
+        
+        i = 0
+        mem = member
+        for value in self.members.values():
+            if i == m:
+                mem = value
+                break
+            i += 1
+
+        self.damagecontrol.Damage(mem, damage)
+        await self.damagecontrol.SendResult()
 
     def ScoreCalc(self, opt):
         try:
@@ -1511,6 +1632,8 @@ class Clan():
             self.bosscount = 0
         await channel.send('次のボスは %s です' % (BossName[self.BossIndex()]) )
 
+        await self.damagecontrol.SendFinish()
+
         if (0 < count):
             self.AddDefeatTime(self.bosscount)
 
@@ -1520,50 +1643,6 @@ class Clan():
             notice = self.CreateNotice(self.BossIndex())
             if (notice is not None):
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
-    
-    async def on_reaction_add(self, reaction, user):
-        idx = self.emojiindex(reaction.emoji)
-        Outlog(ERRFILE, "on_reaction_add %s [%d]" % 
-            (reaction.message.author.display_name, reaction.message.author.id ) )
-
-        if idx is None:
-            return False
-
-        message = reaction.message
-        v = self.AddStamp(message.id)
-        if (v != 1):
-            Outlog(ERRFILE, "self.AddStamp" + " " + v)
-            return False
-
-        member = self.GetMember(message.author)
-        if (member.MessageChcck(message.id)):
-            Outlog(ERRFILE, "member.MessageChcck is none")
-            return False
-
-        overkill = member.IsOverkill()
-
-        if (idx == 0):
-            member.Finish(self, message.id)
-            member.notice = None
-        
-        if (1 <= idx and idx <= 8):
-            boss = member.boss
-            if (overkill):
-                member.Finish(self, message.id, True)
-            else:
-                member.Overkill(self, (idx + 1) * 10, message.id)
-
-            member.notice = None
-
-            if (self.bosscount == boss):
-                await self.ChangeBoss(message.channel, 1)
-        
-        if (idx == 9):
-            member.Cancel(self)
-
-        await self.RemoveReaction(message, overkill, message.guild.me)
-
-        return True
 
     async def on_raw_reaction_add(self, payload):
         member = self.members.get(payload.user_id)
@@ -1596,6 +1675,7 @@ class Clan():
         if (idx == 0):
             member.Finish(self, payload.message_id)
             member.notice = None
+            await self.damagecontrol.Injure(member)
         
         if (1 <= idx and idx <= 8):
             boss = member.boss
@@ -1612,47 +1692,11 @@ class Clan():
         
         if (idx == 9):
             member.Cancel(self)
+            await self.damagecontrol.Remove(member)
 
         message = member.attackmessage
         await self.RemoveReaction(message, overkill, message.guild.me)
         return True
-
-    async def on_reaction_remove(self, reaction, user):
-        idx = self.emojiindex(reaction.emoji)
-        Outlog(ERRFILE, "on_reaction_remove " + reaction.message.author.display_name)
-
-        if (idx is None):
-            return False
-
-        message = reaction.message
-        member = self.GetMember(message.author)
-
-        v = self.RemoveStamp(message.id)
-        if (v != 0):
-            Outlog(ERRFILE, message.author.display_name + " " + v)
-            return False
-
-        if (message.content in ['a', '凸']):
-            if(idx == 9):
-                member.Attack(self, False)
-                await self.AddReaction(message, member.IsOverkill())
-                return True
-
-            data = member.Revert(message.id)
-            if (data is not None):
-                member.Attack(self, False)
-                if (data['defeat']):
-                    if (data['bosscount'] + 1 == self.bosscount):
-                        await self.ChangeBoss(reaction.message.channel, -1)
-                    await reaction.message.channel.send('ボスが食い違う場合は手動で調整してください\n「prevboss」で前のボス、「nextboss」で次のボスに設定します')
-                
-                await self.AddReaction(message, member.IsOverkill())
-
-                return True
-            else:
-                await reaction.message.channel.send('巻き戻しに失敗しました')
-
-        return False
 
     async def on_raw_reaction_remove(self, payload):
         member = self.members.get(payload.user_id)
@@ -2674,6 +2718,12 @@ async def VolatilityMessage(channel, mes, time):
     await asyncio.sleep(time)
     await log.delete()
 
+def AllowMessage(message):
+    if message.channel.name == inputchannel: return True
+    if message.guild.me in message.mentions: return True
+
+    return False
+
 # メッセージ受信時に動作する処理
 @client.event
 async def on_message(message):
@@ -2681,15 +2731,13 @@ async def on_message(message):
     if message.author.bot:
         return
     if message.channel.type == discord.ChannelType.text:
-        if message.channel.name != inputchannel and message.guild.me not in message.mentions :
-            return
+        if AllowMessage(message):
+            clan = GetClan(message.guild, message)
+            result = await clan.on_message(message)
 
-        clan = GetClan(message.guild, message)
-        result = await clan.on_message(message)
-
-        if result:
-            clan.Save(clan, message.guild.id)
-            await Output(clan, clan.Status())
+            if result:
+                clan.Save(clan, message.guild.id)
+                await Output(clan, clan.Status())
         return
 
     global userhash
