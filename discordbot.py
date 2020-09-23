@@ -978,20 +978,19 @@ class DamageControl():
 
         mes += '残りHP %d' % self.remainhp
 
-        sorted = [(key, value) for key, value in self.members.items() if key.IsOverkill()]
-        sorted.sort(key = lambda x:x[1], reverse=True)
+        def Compare(a : Tuple[ClanMember, int], b : Tuple[ClanMember, int]):
+            if a[0].IsOverkill() == b[0].IsOverkill():
+                return b[1] - a[1]
+            return -1 if a[0].IsOverkill else 1
 
-        normalsorted = [(key, value) for key, value in self.members.items() if not key.IsOverkill()]
-        normalsorted.sort(key = lambda x:x[1], reverse=True)
+        damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
 
-        sorted.extend(normalsorted)
-
-        for m in sorted:
-            mes += '\n%s%s:%d' % (m[0].name, '[0]' if m[0].IsOverkill() else '', m[1])
+        for m in damagelist:
+            mes += '\n%s%s:%d' % (m[0].name, '[o]' if m[0].IsOverkill() else '', m[1])
             if self.remainhp <= m[1]:
                 mes += ' %d秒' % (self.OverTime(self.remainhp, m[1], m[0].IsOverkill()))
             else :
-                dinfo = self.DefeatInfomation(sorted, m)
+                dinfo = self.DefeatInfomation(damagelist, m)
                 mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
 
         return mes
@@ -1001,13 +1000,13 @@ class DamageControl():
         
         await self.SendMessage(self.Print())
 
-    async def SendFinish(self):
+    async def SendFinish(self, message = '討伐お疲れ様です'):
         if not self.active: return
 
-        await self.SendMessage('討伐お疲れ様です')
+        await self.SendMessage(message)
+        self.active = False
         self.lastmessage = None
         self.remainhp = 0
-        self.active = False
         self.members = {}
 
     async def SendMessage(self, mes):
@@ -1086,7 +1085,7 @@ class Clan():
             (['nextboss'], self.NextBoss),
             (['notice', '通知'], self.Notice),
             (['refresh'], self.Refresh),
-            (['reset'], self.Reset),
+            (['reset'], self.MemberReset),
             (['history'], self.History),
             (['gachaadd'], self.GachaAdd),
             (['gachadelete'], self.GachaDelete),
@@ -1105,6 +1104,7 @@ class Clan():
             (['remain','残り'], self.Remain),
             (['damage','ダメ','ダメージ'], self.Damage),
             (['pd'], self.PhantomDamage),
+            (['dtest'], self.DamageTest),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1364,6 +1364,10 @@ class Clan():
             await message.channel.send('メンバーがいません')
             return False
 
+    async def MemberReset(self, message, member, opt):
+        member.Reset()
+        return True
+
     async def DailyReset(self, message, member, opt):
         if not message.author.guild_permissions.administrator:
             return False
@@ -1490,11 +1494,17 @@ class Clan():
         try:
             remainhp = int(opt)
         except ValueError:
-            remainhp = 2000
+            await message.channel.send('数字が読み取れません')
+            return False
 
-        self.damagecontrol.SetChannel(message.channel)
-        self.damagecontrol.RemainHp(remainhp)
-        await self.damagecontrol.SendResult()
+        if 0 < remainhp:
+            self.damagecontrol.SetChannel(message.channel)
+            self.damagecontrol.RemainHp(remainhp)
+            await self.damagecontrol.SendResult()
+        else:
+            await self.damagecontrol.SendFinish('キャンセルしました')
+
+        return False
 
     async def Damage(self, message, member, opt):
         if message.channel.type == discord.ChannelType.private:
@@ -1511,6 +1521,16 @@ class Clan():
             return 
         self.damagecontrol.Damage(member, damage)
         await self.damagecontrol.SendResult()
+        return False
+
+    @staticmethod
+    def GetIndexValue(d : Dict, idx : int):
+        i = 0
+        for value in d.values():
+            if i == idx:
+                return value
+            i += 1
+        return None
 
     async def PhantomDamage(self, message, member, opt):
         if message.channel.type == discord.ChannelType.private:
@@ -1529,16 +1549,31 @@ class Clan():
             await message.channel.send('ダメコンを行っていません')
             return 
         
-        i = 0
-        mem = member
-        for value in self.members.values():
-            if i == m:
-                mem = value
-                break
-            i += 1
+        mem = self.GetIndexValue(self.members, m)
+        if mem is None: mem = member
 
         self.damagecontrol.Damage(mem, damage)
         await self.damagecontrol.SendResult()
+
+    async def DamageTest(self, message, member, opt):
+        
+        mem = self.GetIndexValue(self.members, 1)
+        if mem is None: mem = member
+        mem.name = 'ダイチ'
+        self.damagecontrol.Damage(mem, 600)
+
+        mem = self.GetIndexValue(self.members, 2)
+        if mem is None: mem = member
+        mem.name = 'アサヒ'
+        self.damagecontrol.Damage(mem, 800)
+
+        mem = self.GetIndexValue(self.members, 3)
+        if mem is None: mem = member
+        mem.name = 'ミタカ'
+        self.damagecontrol.Damage(mem, 740)
+
+        await self.damagecontrol.SendResult()
+
 
     def ScoreCalc(self, opt):
         try:
@@ -1554,28 +1589,47 @@ class Clan():
             return client.get_channel(outchannel[0].id)
         return None
 
+    def AllowMessage(self, message):
+        if message.channel.name == inputchannel: return True
+        if message.guild.me in message.mentions: return True
+
+        return False
+
     async def on_message(self, message):
-        member = self.GetMember(message.author)
+        if self.AllowMessage(message):
+            member = self.GetMember(message.author)
 
-        content = re.sub('<[^>]*>', '', message.content).strip()
+            content = re.sub('<[^>]*>', '', message.content).strip()
 
-        if message.channel.name == inputchannel:
-            if self.inputchannel is None:
-                self.inputchannel = message.channel
-            
             if self.outputchannel is None:
                 self.outputchannel = self.FindChannel(message.guild, outputchannel)
                 if self.outputchannel is None:
                     await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
 
-        for cmdtuple in self.commandlist:
-            for cmd in cmdtuple[0]:
-                opt = Command(content, cmd)
-                if opt is not None:
-                    try:
-                        return await cmdtuple[1](message, member, opt)
-                    except ValueError:
-                        pass
+            if self.inputchannel is None:
+                if message.channel.name == inputchannel:
+                    self.inputchannel = message.channel
+
+            for cmdtuple in self.commandlist:
+                for cmd in cmdtuple[0]:
+                    opt = Command(content, cmd)
+                    if opt is not None:
+                        try:
+                            return await cmdtuple[1](message, member, opt)
+                        except ValueError:
+                            pass
+        
+        if self.damagecontrol.active and self.damagecontrol.channel == message.channel:
+            member = self.GetMember(message.author)
+            if member.attack:
+                try:
+                    dmg = int(message.content)
+                    if 0 <= dmg:
+                        await self.Damage(message, member, message.content)
+                except ValueError:
+                    pass
+            return False
+
 
         return False
 
@@ -2718,12 +2772,6 @@ async def VolatilityMessage(channel, mes, time):
     await asyncio.sleep(time)
     await log.delete()
 
-def AllowMessage(message):
-    if message.channel.name == inputchannel: return True
-    if message.guild.me in message.mentions: return True
-
-    return False
-
 # メッセージ受信時に動作する処理
 @client.event
 async def on_message(message):
@@ -2731,13 +2779,12 @@ async def on_message(message):
     if message.author.bot:
         return
     if message.channel.type == discord.ChannelType.text:
-        if AllowMessage(message):
-            clan = GetClan(message.guild, message)
-            result = await clan.on_message(message)
+        clan = GetClan(message.guild, message)
+        result = await clan.on_message(message)
 
-            if result:
-                clan.Save(clan, message.guild.id)
-                await Output(clan, clan.Status())
+        if result:
+            clan.Save(clan, message.guild.id)
+            await Output(clan, clan.Status())
         return
 
     global userhash
