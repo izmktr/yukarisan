@@ -1058,11 +1058,12 @@ class Clan():
         self.members: Dict[int, ClanMember] = {}
         self.bosscount = 0
         self.channelid = channelid
-        self.lastmessage = None
+        self.lastmessage : Optional[discord.Message] = None
         self.stampcheck :Dict[str, Any] = {}
         self.beforesortie = 0
         self.lap = {0 : 0.0}
         self.defeatlist = []
+        self.attacklist = []
 
         self.guild : discord.Guild = None
         self.inputchannel = None
@@ -1139,6 +1140,7 @@ class Clan():
         self.beforesortie = 0
         self.lap = {0 : 0.0}
         self.defeatlist.clear()
+        self.attacklist.clear()
 
     def Reset(self):
         self.beforesortie = self.TotalSortie()
@@ -1215,6 +1217,7 @@ class Clan():
         for id in deletemember:
             del self.members[id]
 
+        self.SetInputChannel()
         if self.inputchannel is not None:
             await self.inputchannel.send(mes)
     
@@ -1324,6 +1327,15 @@ class Clan():
 
         with StringIO(text) as bs:
             await message.channel.send(file=discord.File(bs, 'defeatlog.txt'))
+        return False
+
+    async def AttackLog(self, message, member, opt):
+        text = ''
+        for n in self.attacklist:
+            text += n + '\n'
+
+        with StringIO(text) as bs:
+            await message.channel.send(file=discord.File(bs, 'attacklog.txt'))
         return False
 
     async def GachaList(self, message, member, opt):
@@ -1595,20 +1607,27 @@ class Clan():
 
         return False
 
+    def SetOutputChannel(self):
+        if self.outputchannel is None:
+            self.outputchannel = self.FindChannel(self.guild, outputchannel)
+
+    def SetInputChannel(self):
+        if self.inputchannel is None:
+            self.outputchannel = self.FindChannel(self.guild, inputchannel)
+
     async def on_message(self, message):
         if self.AllowMessage(message):
             member = self.GetMember(message.author)
 
             content = re.sub('<[^>]*>', '', message.content).strip()
 
-            if self.outputchannel is None:
-                self.outputchannel = self.FindChannel(message.guild, outputchannel)
-                if self.outputchannel is None:
-                    await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
+            if message.channel.name == inputchannel:
+                self.inputchannel = message.channel
 
-            if self.inputchannel is None:
-                if message.channel.name == inputchannel:
-                    self.inputchannel = message.channel
+            self.SetOutputChannel()
+            if self.outputchannel is None:
+                await message.channel.send('%s というテキストチャンネルを作成してください' % (outputchannel))
+                return False
 
             for cmdtuple in self.commandlist:
                 for cmd in cmdtuple[0]:
@@ -1680,6 +1699,17 @@ class Clan():
         
         self.defeatlist[count - 1] = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
+    def AddAttackTime(self, count):
+        icount = count // 1
+        l = len(self.defeatlist)
+
+        now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        if l < icount:
+            for _i in range(icount - l):
+                self.defeatlist.append(now)
+        
+        self.defeatlist[icount] = now
+
     async def ChangeBoss(self, channel, count):
         self.bosscount += count
         if (self.bosscount < 0):
@@ -1709,8 +1739,6 @@ class Clan():
         if member.attackmessage is None or member.attackmessage.id != payload.message_id:
             return False
 
-        Outlog(ERRFILE, "on_raw_reaction_add [%d]" % (payload.user_id))
-
         idx = self.emojiindex(payload.emoji.name)
         if idx is None:
             return False
@@ -1730,6 +1758,7 @@ class Clan():
             member.Finish(self, payload.message_id)
             member.notice = None
             await self.damagecontrol.Injure(member)
+            self.AddAttackTime(self.TotalSortie())
         
         if (1 <= idx and idx <= 8):
             boss = member.boss
@@ -1743,6 +1772,8 @@ class Clan():
             if (self.bosscount == boss):
                 if self.inputchannel is not None:
                     await self.ChangeBoss(self.inputchannel, 1)
+
+            self.AddAttackTime(self.TotalSortie())
         
         if (idx == 9):
             member.Cancel(self)
@@ -1759,8 +1790,6 @@ class Clan():
 
         if self.inputchannel is None or self.inputchannel.id != payload.channel_id:
             return False
-
-        Outlog(ERRFILE, "on_raw_reaction_remove [%d]" % (payload.user_id))
 
         idx = self.emojiindex(payload.emoji.name)
         if idx is None:
@@ -1909,6 +1938,7 @@ class Clan():
             'beforesortie' : clan.beforesortie,
             'lap' : clan.lap,
             'defeatlist' : clan.defeatlist,
+            'attacklist' : clan.attacklist,
             'admin' : clan.admin,
         }
 
@@ -1931,6 +1961,9 @@ class Clan():
             
             if 'defeatlist' in mdic:
                 clan.defeatlist = mdic['defeatlist']
+
+            if 'attacklist' in mdic:
+                clan.attacklist = mdic['attacklist']
 
             if 'lap' in mdic:
                 for key, value  in mdic['lap'].items():
@@ -2706,6 +2739,7 @@ async def loop():
 
             clan.Reset()
             if resetflag:
+                clan.SetInputChannel()
                 if clan.inputchannel is not None:
                     await clan.inputchannel.send(message)
                 await Output(clan, clan.Status())
@@ -2863,7 +2897,8 @@ async def on_guild_remove(guild):
         except FileNotFoundError:
             pass
 
-async def Output(clan, message):
+async def Output(clan : Clan, message : str):
+    clan.SetOutputChannel()
     if clan.outputchannel is not None:
         if clan.outputlock == 1: return
         try:
