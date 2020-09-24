@@ -1129,6 +1129,7 @@ class Clan():
             (['pd'], self.PhantomDamage),
             (['dtest'], self.DamageTest),
             (['route', 'ルート'], self.Route),
+            (['allroute', 'ルート'], self.AllRoute),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1421,6 +1422,23 @@ class Clan():
             await channel.send('凸ルートをリセットしました')
 
         return True
+
+    async def AllRoute(self, message, member : ClanMember, opt):
+        channel = message.channel
+        s = ''
+
+        bossroute = [[], [], [], [], []]
+        for m in self.members.values():
+            for r in m.route:
+                bossroute[r - 1].append(m.name)
+
+        for i, names in enumerate(bossroute):
+            if 0 < len(names):
+                s += '%s %d人 ' % (BossName[i], len(names))
+                s += ' '.join([name for name in names]) + '\n'
+
+        await channel.send(s)
+        return False
 
     async def SettingReload(self, message, member : ClanMember, opt):
         channel = message.channel
