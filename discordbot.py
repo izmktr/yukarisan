@@ -680,6 +680,7 @@ class ClanMember():
         self.notice = None
         self.mention = ''
         self.gacha = 0
+        self.route = []
         self.attackmessage: Optional[discord.Message] = None
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
 
@@ -782,7 +783,7 @@ class ClanMember():
             s += "[tk]"
         return s
 
-    async def History(self, message):
+    def History(self):
         str = ''
         count = 1
         for h in self.history:
@@ -798,7 +799,7 @@ class ClanMember():
             if (h['overtime'] == 0):
                 count += 1
         if (str == '' ): str = '履歴がありません'
-        await message.channel.send(str)
+        return str
 
     def SetNotice(self, bossstr):
         try:
@@ -810,9 +811,28 @@ class ClanMember():
         except ValueError:
             pass
 
+    def GetUnfinishRoute(self):
+        if self.DayFinish() or len(self.route) == 0: return []
+
+        route = set(self.route)
+        attack = set()
+
+        before = {'defeat' : False}
+        for h in self.history:
+            if before['defeat']:
+                time = before['overtime']
+            else:
+                time = 110 - h['overtime']
+
+            if 50 <= time:
+                attack.add(h['bosscount'] % BOSSNUMBER + 1)
+            before = h
+        
+        return list(route - attack)
+
     def Serialize(self):
         ret = {}
-        selializemember = ['attack', 'name', 'taskkill', 'history', 'boss', 'notice', 'gacha']
+        selializemember = ['attack', 'name', 'taskkill', 'history', 'boss', 'notice', 'gacha', 'route']
 
         for key, value in self.__dict__.items():
             if key in selializemember:
@@ -834,7 +854,7 @@ class ClanMember():
             return ret
         return None
 
-    def dayfinish(self):
+    def DayFinish(self):
         return self.SortieCount() == MAX_SORITE
     
     def UpdateActive(self):
@@ -1084,6 +1104,7 @@ class Clan():
             (['memo', 'メモ'], self.Memo),
             (['prevboss'], self.PrevBoss),
             (['nextboss'], self.NextBoss),
+            (['setboss'], self.SetBoss),
             (['notice', '通知'], self.Notice),
             (['refresh'], self.Refresh),
             (['reset'], self.MemberReset),
@@ -1095,6 +1116,7 @@ class Clan():
             (['gacha10000'], self.Gacha10000),
             (['gacha', 'ガチャ'], self.Gacha),
             (['defeatlog'], self.DefeatLog),
+            (['attacklog'], self.AttackLog),
             (['score'], self.Score),
             (['settingreload'], self.SettingReload),
             (['delete'], self.MemberDelete),
@@ -1106,6 +1128,7 @@ class Clan():
             (['damage','ダメ','ダメージ'], self.Damage),
             (['pd'], self.PhantomDamage),
             (['dtest'], self.DamageTest),
+            (['route', 'ルート'], self.Route),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1141,6 +1164,7 @@ class Clan():
         self.lap = {0 : 0.0}
         self.defeatlist.clear()
         self.attacklist.clear()
+        self.RouteReset()
 
     def Reset(self):
         self.beforesortie = self.TotalSortie()
@@ -1148,6 +1172,10 @@ class Clan():
         self.stampcheck = {}
         for member in self.members.values():
             member.Reset()
+
+    def RouteReset(self):
+        for member in self.members.values():
+            member.route.clear()
 
     def AddStamp(self, messageid):
         if (messageid in self.stampcheck):
@@ -1182,7 +1210,7 @@ class Clan():
             if emoji != u"\u274C":
                 await message.remove_reaction(emoji, me)
 
-    async def SetNotice(self, member, message, bossstr):
+    async def SetNotice(self, member : ClanMember, message : discord.Message, bossstr : str):
         member.SetNotice(bossstr)
 
         if (member.notice is None):
@@ -1244,12 +1272,12 @@ class Clan():
             return False
         return True
 
-    async def Attack(self, message, member, opt):
+    async def Attack(self, message, member : ClanMember, opt):
         self.CheckOptionNone(opt)
 
         if self.CheckInputChannel(message):
             await message.channel.send('%s のチャンネルで発言してください' % inputchannel)
-            return 
+            return False
 
         tmpattack = member.attackmessage if member.attack else None
 
@@ -1264,47 +1292,67 @@ class Clan():
         if tmpattack is not None:
             await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
 
-    async def TaskKill(self, message, member, opt):
+        return True
+
+    async def TaskKill(self, message, member : ClanMember, opt):
         member.taskkill = message.id
         await message.add_reaction(self.taskkillmark)
         return True
 
-    async def PrevBoss(self, message, member, opt):
+    async def PrevBoss(self, message, member : ClanMember, opt):
         await self.ChangeBoss(message.channel, -1)
         return True
 
-    async def NextBoss(self, message, member, opt):
+    async def NextBoss(self, message, member : ClanMember, opt):
         await self.ChangeBoss(message.channel, 1)
         return True
 
-    async def Memo(self, message, member, opt):
+    async def SetBoss(self, message, member : ClanMember, opt):
+        try:
+            sp = opt.split(' ')
+            if 2 <= len(sp):
+                lap = int(sp[0])
+                boss = int(sp[1])
+
+                if 1 <= lap and 1 <= boss and boss <= BOSSNUMBER:
+                    self.bosscount = (lap - 1) * BOSSNUMBER + boss - 1
+                    await self.ChangeBoss(message.channel, 0)
+                else:
+                    raise ValueError
+
+        except ValueError:
+            await message.channel.send('数値エラー')
+
+        return True
+
+    async def Memo(self, message, member : ClanMember, opt):
         member.SetMemo(opt)
         return True
 
-    async def Notice(self, message, member, opt):
+    async def Notice(self, message, member : ClanMember, opt):
         await self.SetNotice(member, message, opt)
         return False
 
-    async def Refresh(self, message, member, opt):
+    async def Refresh(self, message, member : ClanMember, opt):
         await self.MemberRefresh()
         return True
 
-    async def CmdReset(self, message, member, opt):
+    async def CmdReset(self, message, member : ClanMember, opt):
         member.Reset()
         return True
 
-    async def History(self, message, member, opt):
+    async def History(self, message, member : ClanMember, opt):
         if (opt == ''):
-            await member.History(message)
+            await message.channel.send(member.History())
         else:
             fmember = self.FindMember(opt)
             if fmember is not None:
-                await fmember.History(message)
+                await message.channel.send(fmember.History())
             else:
                 await message.channel.send('メンバーがいません')
         return False
 
-    async def Gacha(self, message, member, opt):
+    async def Gacha(self, message, member : ClanMember, opt):
         self.CheckOptionNone(opt)
 
         if (IsClanBattle()):
@@ -1313,14 +1361,14 @@ class Clan():
             await member.Gacha(message.channel)
             return False
 
-    async def Gacha10000(self, message, member, opt):
+    async def Gacha10000(self, message, member : ClanMember, opt):
         if (IsClanBattle()):
             return False
         else:
             await member.Gacha10000(message.channel)
             return False
 
-    async def DefeatLog(self, message, member, opt):
+    async def DefeatLog(self, message, member : ClanMember, opt):
         text = ''
         for n in self.defeatlist:
             text += n + '\n'
@@ -1329,7 +1377,7 @@ class Clan():
             await message.channel.send(file=discord.File(bs, 'defeatlog.txt'))
         return False
 
-    async def AttackLog(self, message, member, opt):
+    async def AttackLog(self, message, member : ClanMember, opt):
         text = ''
         for n in self.attacklist:
             text += n + '\n'
@@ -1338,15 +1386,15 @@ class Clan():
             await message.channel.send(file=discord.File(bs, 'attacklog.txt'))
         return False
 
-    async def GachaList(self, message, member, opt):
+    async def GachaList(self, message, member : ClanMember, opt):
         await message.channel.send(Gacha.GachaScheduleData())
         return False
 
-    async def GachaRate(self, message, member, opt):
+    async def GachaRate(self, message, member : ClanMember, opt):
         await message.channel.send(gacha.ToString())
         return False
 
-    async def Score(self, message, member, opt):
+    async def Score(self, message, member : ClanMember, opt):
         result = self.ScoreCalc(opt)
         if (result is not None):
             await message.channel.send('%d-%d %s (残りHP %s %%)' % 
@@ -1355,8 +1403,26 @@ class Clan():
         else:
             await message.channel.send('計算できませんでした')
             return False
+    
+    async def Route(self, message, member : ClanMember, opt):
+        channel = message.channel
+        route = set()
+        for n in opt:
+            try:
+                route.add(int(n))
+            except ValueError:
+                pass
 
-    async def SettingReload(self, message, member, opt):
+        member.route = list(route)               
+
+        if 0 < len(member.route):
+            await channel.send('凸ルート:' + ' '.join([BossName[i  - 1] for i in route]))
+        else:
+            await channel.send('凸ルートをリセットしました')
+
+        return True
+
+    async def SettingReload(self, message, member : ClanMember, opt):
         channel = message.channel
 
         GlobalStrage.Load()
@@ -1364,7 +1430,7 @@ class Clan():
         await channel.send('リロードしました')
         return False
 
-    async def MemberDelete(self, message, member, opt):
+    async def MemberDelete(self, message, member : ClanMember, opt):
         if not message.author.guild_permissions.administrator:
             return False
 
@@ -1376,25 +1442,25 @@ class Clan():
             await message.channel.send('メンバーがいません')
             return False
 
-    async def MemberReset(self, message, member, opt):
+    async def MemberReset(self, message, member : ClanMember, opt):
         member.Reset()
         return True
 
-    async def DailyReset(self, message, member, opt):
+    async def DailyReset(self, message, member : ClanMember, opt):
         if not message.author.guild_permissions.administrator:
             return False
 
         self.Reset()
         return True
 
-    async def MonthlyReset(self, message, member, opt):
+    async def MonthlyReset(self, message, member : ClanMember, opt):
         if not message.author.guild_permissions.administrator:
             return False
 
         self.FullReset()
         return True
 
-    async def BossName(self, message, member, opt):
+    async def BossName(self, message, member : ClanMember, opt):
         if not self.admin: return False
         if not message.author.guild_permissions.administrator: return False
         channel = message.channel
@@ -1412,7 +1478,7 @@ class Clan():
         await channel.send('ボスを更新しました'+','.join(BossName))
         return True
 
-    async def Term(self, message, member, opt):
+    async def Term(self, message, member : ClanMember, opt):
         if not self.admin: return False
         if not message.author.guild_permissions.administrator: return False
         channel = message.channel
@@ -1441,7 +1507,7 @@ class Clan():
             await channel.send('日付エラーです')
         return True
 
-    async def GachaAdd(self, message, member, opt):
+    async def GachaAdd(self, message, member : ClanMember, opt):
         if not self.admin: return False
         if not message.author.guild_permissions.administrator: return False
 
@@ -1482,7 +1548,7 @@ class Clan():
         await channel.send(mes)
         return False
 
-    async def GachaDelete(self, message, member, opt):
+    async def GachaDelete(self, message, member : ClanMember, opt):
         channel = message.channel
 
         global GachaData
@@ -1498,7 +1564,7 @@ class Clan():
         await channel.send('数値変換に失敗しました')
         return False
 
-    async def Remain(self, message, member, opt):
+    async def Remain(self, message, member : ClanMember, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
             return
@@ -1518,7 +1584,7 @@ class Clan():
 
         return False
 
-    async def Damage(self, message, member, opt):
+    async def Damage(self, message, member : ClanMember, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
             return
@@ -1544,7 +1610,7 @@ class Clan():
             i += 1
         return None
 
-    async def PhantomDamage(self, message, member, opt):
+    async def PhantomDamage(self, message, member : ClanMember, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
             return
@@ -1567,7 +1633,7 @@ class Clan():
         self.damagecontrol.Damage(mem, damage)
         await self.damagecontrol.SendResult()
 
-    async def DamageTest(self, message, member, opt):
+    async def DamageTest(self, message, member : ClanMember, opt):
         
         mem = self.GetIndexValue(self.members, 1)
         if mem is None: mem = member
@@ -1700,15 +1766,15 @@ class Clan():
         self.defeatlist[count - 1] = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
     def AddAttackTime(self, count):
-        icount = count // 1
-        l = len(self.defeatlist)
+        icount = int(count)
+        l = len(self.attacklist)
 
         now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-        if l < icount:
-            for _i in range(icount - l):
-                self.defeatlist.append(now)
+        if l <= icount:
+            for _i in range(icount + 1 - l):
+                self.attacklist.append(now)
         
-        self.defeatlist[icount] = now
+        self.attacklist[icount] = now
 
     async def ChangeBoss(self, channel, count):
         self.bosscount += count
@@ -1718,15 +1784,18 @@ class Clan():
 
         await self.damagecontrol.SendFinish()
 
-        if (0 < count):
+        if (0 <= count):
             self.AddDefeatTime(self.bosscount)
 
-            if (self.bosscount % BOSSNUMBER == 0):
-                self.lap[self.bosscount // BOSSNUMBER] = self.TotalSortie()
+            if (self.BossIndex() == 0):
+                self.lap[self.BossLap() - 1] = self.TotalSortie()
 
             notice = self.CreateNotice(self.BossIndex())
             if (notice is not None):
                await channel.send('%s %s がやってきました' % (notice, BossName[self.BossIndex()]))
+
+            if self.BossIndex() == 0 and self.BossLap() in LevelUpLap:
+                self.RouteReset()
 
     async def on_raw_reaction_add(self, payload):
         member = self.members.get(payload.user_id)
@@ -1755,12 +1824,15 @@ class Clan():
         overkill = member.IsOverkill()
 
         if (idx == 0):
+            self.AddAttackTime(self.TotalSortie())
+
             member.Finish(self, payload.message_id)
             member.notice = None
             await self.damagecontrol.Injure(member)
-            self.AddAttackTime(self.TotalSortie())
         
         if (1 <= idx and idx <= 8):
+            self.AddAttackTime(self.TotalSortie())
+
             boss = member.boss
             if (overkill):
                 member.Finish(self, payload.message_id, True)
@@ -1773,7 +1845,6 @@ class Clan():
                 if self.inputchannel is not None:
                     await self.ChangeBoss(self.inputchannel, 1)
 
-            self.AddAttackTime(self.TotalSortie())
         
         if (idx == 9):
             member.Cancel(self)
@@ -1858,6 +1929,9 @@ class Clan():
     def BossIndex(self):
         return self.bosscount % BOSSNUMBER
     
+    def BossLap(self):
+        return self.bosscount // BOSSNUMBER + 1
+
     def BossLevel(self):
         level = 1
         lap = self.bosscount // BOSSNUMBER
@@ -1875,7 +1949,7 @@ class Clan():
 
     def Status(self):
         s = ''
-        s += '現在 %d-%d %s\n' % (self.bosscount // BOSSNUMBER + 1, self.BossIndex() + 1, BossName[self.BossIndex()])
+        s += '現在 %d-%d %s\n' % (self.BossLap(), self.BossIndex() + 1, BossName[self.BossIndex()])
 
         attackcount = 0
         count : List[List[ClanMember]] = [[], [], [], []]
@@ -1927,6 +2001,22 @@ class Clan():
                 s += '%d回目 %d人\n' % (i, len(c))
                 s += '  '.join([m.AttackName() for m in c]) + '\n'
         
+        routedisplay = False
+        bossroute = [[], [], [], [], []]
+        for m in self.members.values():
+            route = m.GetUnfinishRoute()
+
+            for r in route:
+                bossroute[r - 1].append(m.name)
+                routedisplay = True
+
+        if routedisplay:
+            s += '\nルート宣言\n'
+            for i, names in enumerate(bossroute):
+                if 0 < len(names):
+                    s += '%s %d人 ' % (BossName[i], len(names))
+                    s += ' '.join([name for name in names]) + '\n'
+
         return s
 
     @staticmethod
