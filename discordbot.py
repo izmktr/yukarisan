@@ -1711,7 +1711,7 @@ class Clan():
 
     def SetInputChannel(self):
         if self.inputchannel is None:
-            self.outputchannel = self.FindChannel(self.guild, inputchannel)
+            self.inputchannel = self.FindChannel(self.guild, inputchannel)
 
     async def on_message(self, message):
         if self.AllowMessage(message):
