@@ -77,6 +77,11 @@ T = TypeVar('T')
 
 BOSSNUMBER = len(BossName)
 
+def sign(n : int):
+    if n < 0 : return -1
+    if 0 < n : return 1
+    return 0
+
 class GachaRate():
     def __init__(self, rate, star, namelist):
         self.rate : float = rate
@@ -983,9 +988,16 @@ class DamageControl():
         thp = self.remainhp - member[1]
 
         i = 0
+
+        found = False
+        moverkill = member[0].IsOverkill()
         for s in slist:
-            if member != s and thp < s[1]:
-                if not member[0].IsOverkill() and s[0].IsOverkill(): continue
+            if member == s:
+                found = True
+                continue
+                
+            if thp <= s[1]:
+                if s[0].IsOverkill() and (not found or not moverkill) : continue
 
                 result.append( (s[0].name, self.OverTime(thp, s[1], s[0].IsOverkill() )) )
                 i += 1
@@ -993,15 +1005,17 @@ class DamageControl():
 
         return result
 
-    def Print(self):
+    def Status(self):
         mes = ''
 
         mes += '残りHP %d' % self.remainhp
 
         def Compare(a : Tuple[ClanMember, int], b : Tuple[ClanMember, int]):
-            if a[0].IsOverkill() == b[0].IsOverkill():
-                return b[1] - a[1]
-            return -1 if a[0].IsOverkill else 1
+            ao = a[0].IsOverkill()
+            bo = b[0].IsOverkill()
+
+            if ao == bo: return sign(b[1] - a[1])
+            return sign(bo - ao)
 
         damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
 
@@ -1018,7 +1032,7 @@ class DamageControl():
     async def SendResult(self):
         if not self.active: return
         
-        await self.SendMessage(self.Print())
+        await self.SendMessage(self.Status())
 
     async def SendFinish(self, message = '討伐お疲れ様です'):
         if not self.active: return
