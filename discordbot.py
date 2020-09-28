@@ -1025,9 +1025,10 @@ class DamageControl():
 
         damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
         totaldamage = sum([n[1] for n in damagelist])
+#        okdamage = sum([n[1] for n in damagelist if n[0].IsOverkill()])
 
         mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
-        if totaldamage < self.remainhp:
+        if 0 < totaldamage and totaldamage < self.remainhp:
             mes += '  不足分 %d' % (self.remainhp - totaldamage)
 
         for m in damagelist:
