@@ -1246,7 +1246,10 @@ class Clan():
         reactemojis = self.emojis if not overkill else self.emojisoverkill
 
         for emoji in reactemojis:
-            await message.remove_reaction(emoji, me)
+            try:
+                await message.remove_reaction(emoji, me)
+            except discord.errors.NotFound:
+                break
 
     async def RemoveReactionNotCancel(self, message, overkill : bool, me):
         reactemojis = self.emojis if not overkill else self.emojisoverkill
