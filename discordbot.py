@@ -941,13 +941,16 @@ class DamageControl():
         self.lastmessage = None
         self.channel = None
         self.remainhp = 0
+        self.bossindex = 0
         self.members : Dict[ClanMember, int] = {}
+        self.outputlock = 0
 
     def SetChannel(self, channel):
         self.channel = channel
 
-    def RemainHp(self, hp : int):
+    def RemainHp(self, bossindex: int, hp : int):
         self.active = True
+        self.bossindex = bossindex
         self.remainhp = hp
 
     def Damage(self, member : ClanMember, damage : int):
@@ -969,6 +972,11 @@ class DamageControl():
             del self.members[member]
             await self.SendResult()
 
+    def IsAutoExecutive(self):
+        if self.channel is None: return False
+        if self.active: return False
+        if 0 < self.remainhp: return False
+        return True
 
     @staticmethod
     def OverTime(remainhp : int, damage : int, overkill : bool):
@@ -1008,8 +1016,6 @@ class DamageControl():
     def Status(self):
         mes = ''
 
-        mes += '残りHP %d' % self.remainhp
-
         def Compare(a : Tuple[ClanMember, int], b : Tuple[ClanMember, int]):
             ao = a[0].IsOverkill()
             bo = b[0].IsOverkill()
@@ -1018,6 +1024,11 @@ class DamageControl():
             return sign(bo - ao)
 
         damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
+        totaldamage = sum([n[1] for n in damagelist])
+
+        mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
+        if totaldamage < self.remainhp:
+            mes += '  不足分 %d' % (self.remainhp - totaldamage)
 
         for m in damagelist:
             mes += '\n%s%s:%d' % (m[0].name, '[o]' if m[0].IsOverkill() else '', m[1])
@@ -1025,7 +1036,10 @@ class DamageControl():
                 mes += ' %d秒' % (self.OverTime(self.remainhp, m[1], m[0].IsOverkill()))
             else :
                 dinfo = self.DefeatInfomation(damagelist, m)
-                mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
+                if 0 < len(dinfo):
+                    mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
+                else:
+                    mes += '  残り %d' % (self.remainhp - m[1])
 
         return mes
 
@@ -1037,22 +1051,35 @@ class DamageControl():
     async def SendFinish(self, message = '討伐お疲れ様です'):
         if not self.active: return
 
-        await self.SendMessage(message)
+        if self.lastmessage is not None:
+            await self.SendMessage(message)
+
         self.active = False
         self.lastmessage = None
         self.remainhp = 0
         self.members = {}
 
     async def SendMessage(self, mes):
-
+        if self.outputlock == 1: return
         try:
+            while self.outputlock != 0:
+                await asyncio.sleep(1)
+
             if self.lastmessage is not None:
-                await self.lastmessage.delete()
-        except discord.errors.NotFound:
-            pass
+                self.outputlock = 1
+                try:
+                    await self.lastmessage.delete()
+                except discord.errors.NotFound:
+                    pass
+                self.lastmessage = None
 
-        self.lastmessage = await self.channel.send(mes)
-
+            try:
+                self.outputlock = 2
+                self.lastmessage = await self.channel.send(mes)
+            except discord.errors.Forbidden:
+                self.channel = None
+        finally:
+            self.outputlock = 0
    
 class Clan():
     numbermarks = [
@@ -1134,7 +1161,7 @@ class Clan():
             (['score'], self.Score),
             (['settingreload'], self.SettingReload),
             (['delete'], self.MemberDelete),
-            (['daylyreset'], self.DailyReset),
+            (['dailyreset'], self.DailyReset),
             (['monthlyreset'], self.MonthlyReset),
             (['bossname'], self.BossName),
             (['term'], self.Term),
@@ -1144,6 +1171,8 @@ class Clan():
             (['dtest'], self.DamageTest),
             (['route', 'ルート'], self.Route),
             (['allroute', 'ルート'], self.AllRoute),
+            (['clanattack'], self.AllClanAttack),
+            (['clanreport'], self.AllClanReport),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1223,7 +1252,10 @@ class Clan():
 
         for emoji in reactemojis:
             if emoji != u"\u274C":
-                await message.remove_reaction(emoji, me)
+                try:
+                    await message.remove_reaction(emoji, me)
+                except discord.errors.NotFound:
+                    break
 
     async def SetNotice(self, member : ClanMember, message : discord.Message, bossstr : str):
         member.SetNotice(bossstr)
@@ -1287,6 +1319,9 @@ class Clan():
             return False
         return True
 
+    def AttackNum(self):
+        return len([m for m in clan.members.values() if m.attack])
+
     async def Attack(self, message, member : ClanMember, opt):
         self.CheckOptionNone(opt)
 
@@ -1297,6 +1332,15 @@ class Clan():
         tmpattack = member.attackmessage if member.attack else None
 
         member.Attack(self)
+
+        if 2 <= self.AttackNum():
+            if  self.damagecontrol.IsAutoExecutive():
+                try:
+                    enemyhp = BossHpData[self.BossLevel() - 1][self.BossIndex()][0]
+                    self.damagecontrol.RemainHp(self.BossIndex(), enemyhp)
+                except IndexError:
+                    pass
+
 
         if (member.taskkill != 0):
             await message.add_reaction(self.taskkillmark)
@@ -1596,6 +1640,44 @@ class Clan():
         await channel.send('数値変換に失敗しました')
         return False
 
+    async def AllClanAttack(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        channel = message.channel
+
+        mes = ''
+        for guild in client.guilds:
+            clan = clanhash.get(guild.id)
+            if clan is not None:
+                attackmembers = [m.name for m in clan.members.values() if m.attack]
+                atn = len(attackmembers)
+                if 0 < atn:
+                    mes += '[%s] %d %s\n' % (guild.name, atn, ' '.join(attackmembers))
+
+        await channel.send(mes)
+
+        return False
+
+    async def AllClanReport(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        channel = message.channel
+
+        mes = ''
+        for guild in client.guilds:
+            mes += '[%d] %s\n' % (guild.id, guild.name)
+
+            clan = clanhash.get(guild.id)
+            if clan is not None:
+                mes += clan.Status() + '\n'
+
+        with StringIO(mes) as bs:
+            await channel.send(file=discord.File(bs, 'report.txt'))
+
+        return False
+
     async def Remain(self, message, member : ClanMember, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
@@ -1609,7 +1691,7 @@ class Clan():
 
         if 0 < remainhp:
             self.damagecontrol.SetChannel(message.channel)
-            self.damagecontrol.RemainHp(remainhp)
+            self.damagecontrol.RemainHp(self.BossIndex(), remainhp)
             await self.damagecontrol.SendResult()
         else:
             await self.damagecontrol.SendFinish('キャンセルしました')
@@ -1693,7 +1775,9 @@ class Clan():
         except ValueError:
             return None
     
-    def FindChannel(self, guild : discord.guild, name : str) -> Optional[discord.TextChannel]:
+    def FindChannel(self, guild : discord.Guild, name : str) -> Optional[discord.TextChannel]:
+        if guild is None or guild.channels is None:
+            return None
         outchannel = [channel for channel in guild.channels if channel.name == name]
         if 0 < len(outchannel):
             return client.get_channel(outchannel[0].id)
@@ -1791,11 +1875,12 @@ class Clan():
     def AddDefeatTime(self, count):
         l = len(self.defeatlist)
 
+        now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         if l < count:
             for _i in range(count - l):
-                self.defeatlist.append('2000/01/01 00:00:00')
+                self.defeatlist.append(now)
         
-        self.defeatlist[count - 1] = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+        self.defeatlist[count - 1] = now
 
     def AddAttackTime(self, count):
         icount = int(count)
