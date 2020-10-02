@@ -783,7 +783,7 @@ class ClanMember():
     def AttackName(self):
         s = self.name
         if (self.IsOverkill()):
-            s += "[o]"
+            s += "[o%d]" % (self.Overtime() // 10)
         if (self.taskkill != 0):
             s += "[tk]"
         return s
@@ -1013,6 +1013,17 @@ class DamageControl():
 
         return result
 
+    def DefeatCount(self, damagelist):
+        defeatcount = 1
+        dsum = 0
+        for n in damagelist:
+            dsum += n[1]
+            if self.remainhp < dsum:
+                break
+            defeatcount += 1
+        
+        return defeatcount
+
     def Status(self):
         mes = ''
 
@@ -1025,11 +1036,17 @@ class DamageControl():
 
         damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
         totaldamage = sum([n[1] for n in damagelist])
-#        okdamage = sum([n[1] for n in damagelist if n[0].IsOverkill()])
 
         mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
         if 0 < totaldamage and totaldamage < self.remainhp:
             mes += '  不足分 %d' % (self.remainhp - totaldamage)
+        else:
+            defeatcount = self.DefeatCount(damagelist)
+            if 3 <= defeatcount:
+                last = damagelist[defeatcount - 1]
+                mes += '\n' + '→'.join([damagelist[i][0].name for i in range(defeatcount) ])
+                prevdamage = sum([damagelist[i][1] for i in range(defeatcount - 1) ])
+                mes += ' %d秒' % self.OverTime(self.remainhp - prevdamage, last[1], last[0].IsOverkill() )
 
         for m in damagelist:
             mes += '\n%s%s:%d' % (m[0].name, '[o]' if m[0].IsOverkill() else '', m[1])
@@ -1174,6 +1191,7 @@ class Clan():
             (['allroute', 'ルート'], self.AllRoute),
             (['clanattack'], self.AllClanAttack),
             (['clanreport'], self.AllClanReport),
+            (['active', 'アクティブ'], self.ActiveMember),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1682,6 +1700,23 @@ class Clan():
 
         return False
 
+    async def ActiveMember(self, message, member : ClanMember, opt):
+        channel = message.channel
+
+        mes = ''
+
+        ttime = datetime.datetime.now() + datetime.timedelta(hours = -1)
+        active = [m for m in self.members.values() if ttime < m.lastactive]
+
+        for m in active:
+            mes += '%s: %d凸\n' % (m.name, m.SortieCount())
+            if m.IsOverkill():
+                mes += '[%s:%d秒]' % (BossName[m.Overboss() % BOSSNUMBER], m.Overtime())
+            mes += '\n'
+
+        await channel.send(mes)
+        return False
+
     async def Remain(self, message, member : ClanMember, opt):
         if message.channel.type == discord.ChannelType.private:
             await message.channel.send('このチャンネルでは使えません')
@@ -1782,9 +1817,9 @@ class Clan():
     def FindChannel(self, guild : discord.Guild, name : str) -> Optional[discord.TextChannel]:
         if guild is None or guild.channels is None:
             return None
-        outchannel = [channel for channel in guild.channels if channel.name == name]
-        if 0 < len(outchannel):
-            return client.get_channel(outchannel[0].id)
+        for channel in guild.channels:
+            if channel.name == name:
+                return client.get_channel(channel.id)
         return None
 
     def AllowMessage(self, message):
@@ -1804,6 +1839,7 @@ class Clan():
     async def on_message(self, message):
         if self.AllowMessage(message):
             member = self.GetMember(message.author)
+            member.UpdateActive()
 
             content = re.sub('<[^>]*>', '', message.content).strip()
 
@@ -1835,6 +1871,9 @@ class Clan():
                     pass
             return False
 
+        member = self.members.get(message.author.id)
+        if member is not None:
+            member.UpdateActive()
 
         return False
 
