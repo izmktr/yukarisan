@@ -1709,7 +1709,7 @@ class Clan():
         active = [m for m in self.members.values() if ttime < m.lastactive]
 
         for m in active:
-            mes += '%s: %d凸\n' % (m.name, m.SortieCount())
+            mes += '%s: %d凸' % (m.name, m.SortieCount())
             if m.IsOverkill():
                 mes += '[%s:%d秒]' % (BossName[m.Overboss() % BOSSNUMBER], m.Overtime())
             mes += '\n'
