@@ -1490,7 +1490,9 @@ class Clan():
         route = set()
         for n in opt:
             try:
-                route.add(int(n))
+                r = int(n)
+                if 1 <= r and r <= 5:
+                    route.add(r)
             except ValueError:
                 pass
 
@@ -1510,7 +1512,8 @@ class Clan():
         bossroute = [[], [], [], [], []]
         for m in self.members.values():
             for r in m.route:
-                bossroute[r - 1].append(m.name)
+                if 0 < r and r <= len(bossroute):
+                    bossroute[r - 1].append(m.name)
 
         for i, names in enumerate(bossroute):
             if 0 < len(names):
