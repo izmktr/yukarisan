@@ -677,7 +677,7 @@ class ClanMember():
 
     def __init__(self):
         self.attack = False
-        self.attacktime = None
+        self.reportlimit = None
         self.name = ''
         self.taskkill = 0
         self.history : List[Dict[str, Any]] = []
@@ -704,7 +704,7 @@ class ClanMember():
 
     def Attack(self, clan, renewal = True):
         self.attack = True
-        self.attacktime = datetime.datetime.now()
+        self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
 
         if (renewal):
             self.boss = clan.bosscount
@@ -720,16 +720,16 @@ class ClanMember():
 
     def Finish(self, clan, messageid, defeat = False):
         self.attack = False
-        self.attacktime = None
+        self.reportlimit = None
         self.CreateHistory(messageid, self.boss, 0, defeat)
     
     def Cancel(self, clan):
         self.attack = False
-        self.attacktime = None
+        self.reportlimit = None
 
     def Overkill(self, clan, overtime, messageid):
         self.attack = False
-        self.attacktime = None
+        self.reportlimit = None
         self.CreateHistory(messageid, self.boss, overtime, True)
     
     def Overtime(self):
@@ -765,7 +765,7 @@ class ClanMember():
 
     def Reset(self):
         self.attack = False
-        self.attacktime = None
+        self.reportlimit = None
         self.taskkill = 0
         self.history = []
         self.notice = None
@@ -1066,7 +1066,7 @@ class DamageControl():
         
         await self.SendMessage(self.Status())
 
-    async def SendFinish(self, message = '討伐お疲れ様です'):
+    async def SendFinish(self, message):
         if not self.active: return
 
         if self.lastmessage is not None:
@@ -1166,6 +1166,7 @@ class Clan():
             (['setboss'], self.SetBoss),
             (['notice', '通知'], self.Notice),
             (['refresh'], self.Refresh),
+            (['memberlist'], self.MemberList),
             (['reset'], self.MemberReset),
             (['history'], self.History),
             (['gachaadd'], self.GachaAdd),
@@ -1417,6 +1418,15 @@ class Clan():
     async def Refresh(self, message, member : ClanMember, opt):
         await self.MemberRefresh()
         return True
+
+    async def MemberList(self, message, member : ClanMember, opt):
+        await message.channel.send('len %d' % (len(message.guild.members)))
+
+        for m in message.guild.members:
+            await message.channel.send('%s' % (m.name))
+
+        return False
+
 
     async def CmdReset(self, message, member : ClanMember, opt):
         member.Reset()
@@ -1940,12 +1950,12 @@ class Clan():
         self.attacklist[icount] = now
 
     async def ChangeBoss(self, channel, count):
+        await self.damagecontrol.SendFinish('%s の討伐お疲れさまです' % (BossName[self.BossIndex()]))
+
         self.bosscount += count
         if (self.bosscount < 0):
             self.bosscount = 0
         await channel.send('次のボスは %s です' % (BossName[self.BossIndex()]) )
-
-        await self.damagecontrol.SendFinish()
 
         if (0 <= count):
             self.AddDefeatTime(self.bosscount)
@@ -2008,6 +2018,9 @@ class Clan():
                 if self.inputchannel is not None:
                     await self.ChangeBoss(self.inputchannel, 1)
 
+            for m in self.members.values():
+                if m.attack and m.boss == boss:
+                    m.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 5)
         
         if (idx == 9):
             member.Cancel(self)
@@ -3013,11 +3026,11 @@ async def loop():
                     message = 'クランバトル終了です。お疲れさまでした。'
                     await clan.inputchannel.send(message)
     
-    shtime = now + datetime.timedelta(minutes = -15)
+    shtime = now
     for clan in clanhash.values():
         for member in clan.members.values():
-            if (member.attacktime is not None and member.attacktime < shtime):
-                member.attacktime = None
+            if (member.reportlimit is not None and member.reportlimit < shtime):
+                member.reportlimit = None
 
                 if clan.inputchannel is not None:
                     message = '%s 凸結果の報告をお願いします' % member.mention
