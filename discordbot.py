@@ -3017,11 +3017,11 @@ async def loop():
                     await Output(clan, clan.Status())
                 else:
                     clan.lastmessage = None
-                Outlog(ERRFILE, '%s flag:%s inputvarid:%s' % (clan.guild.name, resetflag, clan.inputchannel is not None))
-
                 Clan.Save(clan, guildid)
-            except:
-                pass
+
+                Outlog(ERRFILE, '%s flag:%s inputvarid:%s' % (clan.guild.name, resetflag, clan.inputchannel is not None))
+            except Exception as e:
+                Outlog(ERRFILE, 'error: %s e.args:%s' % (clan.guild.name, e.args))
 
         for user in userhash.values():
             user.UsedClear()
