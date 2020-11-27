@@ -1539,6 +1539,8 @@ class Clan():
         GlobalStrage.Load()
         gacha.BoxReset()
         await channel.send('リロードしました')
+        await channel.send('term %s-%s' % (BATTLESTART, BATTLEEND))
+
         return False
 
     async def MemberDelete(self, message, member : ClanMember, opt):
@@ -2950,7 +2952,9 @@ class PrivateMessage:
 
 
 # 接続に必要なオブジェクトを生成
-client = discord.Client()
+intents = discord.Intents.default()  # デフォルトのIntentsオブジェクトを生成
+intents.typing = False  # typingを受け取らないように
+client = discord.Client(intents=intents)
 
 clanhash: Dict[int, Clan] = {}
 
@@ -2984,40 +2988,46 @@ async def loop():
     nowtime = now.strftime('%H:%M')
 
     if nowtime == '05:00':
+        Outlog(ERRFILE, '05:00 batch start len:%d ' % (len(clanhash)))
+        
         for guildid, clan in clanhash.items():
-            message = 'おはようございます\nメンバーの情報をリセットしました'
-            resetflag = True if clan.SortieCount() != 0 else False
+            try:
+                message = 'おはようございます\nメンバーの情報をリセットしました'
+                resetflag = True if clan.SortieCount() != 0 else False
 
-            if (nowdate == BATTLEPRESTART):
-                message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
-                clan.FullReset()
-                await clan.MemberRefresh()
-                resetflag = True
+                if (nowdate == BATTLEPRESTART):
+                    message = 'おはようございます\n明日よりクランバトルです。状況報告に名前が出ていない人は、今日中に「凸」と発言してください。'
+                    clan.FullReset()
+                    resetflag = True
 
-            if (nowdate == BATTLESTART):
-                message = 'おはようございます\nいよいよクランバトルの開始です。頑張りましょう。'
-                clan.FullReset()
-                resetflag = True
+                if (nowdate == BATTLESTART):
+                    message = 'おはようございます\nいよいよクランバトルの開始です。頑張りましょう。'
+                    clan.FullReset()
+                    resetflag = True
 
-            if (nowdate == BATTLEEND):
-                message = 'おはようございます\n今日がクランバトル最終日です。24時が終了時刻ですので早めに攻撃を終わらせましょう。'
-                resetflag = True
+                if (nowdate == BATTLEEND):
+                    message = 'おはようございます\n今日がクランバトル最終日です。24時が終了時刻ですので早めに攻撃を終わらせましょう。'
+                    resetflag = True
 
-            clan.Reset()
-            if resetflag:
-                clan.SetInputChannel()
-                if clan.inputchannel is not None:
-                    await clan.inputchannel.send(message)
-                await Output(clan, clan.Status())
-            else:
-                clan.lastmessage = None
+                clan.Reset()
+                if resetflag:
+                    clan.SetInputChannel()
+                    if clan.inputchannel is not None:
+                        await clan.inputchannel.send(message)
+                    await Output(clan, clan.Status())
+                else:
+                    clan.lastmessage = None
+                Outlog(ERRFILE, '%s flag:%s inputvarid:%s' % (clan.guild.name, resetflag, clan.inputchannel is not None))
 
-            Clan.Save(clan, guildid)
+                Clan.Save(clan, guildid)
+            except:
+                pass
 
         for user in userhash.values():
             user.UsedClear()
         
         PrivateUser.SaveList(userhash)
+        Outlog(ERRFILE, '05:00 batch end')
 
     if nowtime == '23:59':
         for clan in clanhash.values():
