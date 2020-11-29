@@ -53,6 +53,7 @@ GachaData = []
 
 from os.path import expanduser
 from re import match, split
+from types import MemberDescriptorType
 import tokenkeycode
 
 import asyncio
@@ -709,6 +710,26 @@ class ClanMember():
         if (renewal):
             self.boss = clan.bosscount
 
+    def DecoName(self, opt : str) -> str:
+        s = ''
+        for c in opt:
+            if c == 'n': s += self.name
+            elif c == 's': 
+                s += '%d凸' % self.SortieCount()
+            elif c == 'S': 
+                s += '[%d凸]' % self.SortieCount()
+            elif c == 't': 
+                if self.taskkill: s += 'tk'
+            elif c == 'T': 
+                if self.taskkill: s += '[tk]'
+            elif c == 'o':
+                if self.IsOverkill(): s += 'o%d' % (self.Overtime() // 10)
+            elif c == 'O':
+                if self.IsOverkill(): s += '[o%d]' % (self.Overtime() // 10)
+            else: s += c
+
+        return s
+
     def SortieCount(self):
         count = 0
         for h in self.history:
@@ -775,7 +796,7 @@ class ClanMember():
         if not self.IsOverkill():
             return ''
 
-        overkill = '%s %s:%d秒' % (self.name, BossName[self.Overboss() % BOSSNUMBER], self.Overtime())
+        overkill = '%s %s:%d秒' % (self.DecoName('nS'), BossName[self.Overboss() % BOSSNUMBER], self.Overtime())
         if self.Memo() != '':
             overkill += ' %s' % (self.Memo())
         return overkill
@@ -934,6 +955,13 @@ class ClanMember():
         
         await channel.send(mes)
 
+class DamageControlMember:
+
+    def __init__(self, member : ClanMember, damage : int) -> None:
+        self.member : ClanMember = member
+        self.damage = 0
+        self.status = 0
+
 class DamageControl():
 
     def __init__(self):
@@ -942,7 +970,7 @@ class DamageControl():
         self.channel = None
         self.remainhp = 0
         self.bossindex = 0
-        self.members : Dict[ClanMember, int] = {}
+        self.members : Dict[ClanMember, DamageControlMember] = {}
         self.outputlock = 0
 
     def SetChannel(self, channel):
@@ -954,7 +982,7 @@ class DamageControl():
         self.remainhp = hp
 
     def Damage(self, member : ClanMember, damage : int):
-        self.members[member] = damage
+        self.members[member] = DamageControlMember(member, damage)
 
     async def Remove(self, member : ClanMember):
         if not self.active: return
@@ -966,10 +994,13 @@ class DamageControl():
     async def Injure(self, member : ClanMember):
         if not self.active: return
         if member in self.members:
-            self.remainhp -= self.members[member]
+            m = self.members[member]
+            self.remainhp -= m.damage
             if self.remainhp < 0 : self.remainhp = 0
+            
+            m.damage = 0
+            m.status = 1
 
-            del self.members[member]
             await self.SendResult()
 
     def IsAutoExecutive(self):
@@ -991,33 +1022,33 @@ class DamageControl():
         if max < d: return max
         return d
 
-    def DefeatInfomation(self, slist : list, member : Tuple[ClanMember, int], limit = 3):
+    def DefeatInfomation(self, slist : List[DamageControlMember], dcm : DamageControlMember, limit = 3):
         result = []
-        thp = self.remainhp - member[1]
+        thp = self.remainhp - dcm.damage
 
         i = 0
 
         found = False
-        moverkill = member[0].IsOverkill()
+        moverkill = dcm.member.IsOverkill()
         for s in slist:
-            if member == s:
+            if dcm == s:
                 found = True
                 continue
                 
-            if thp <= s[1]:
-                if s[0].IsOverkill() and (not found or not moverkill) : continue
+            if thp <= s.damage:
+                if s.member.IsOverkill() and (not found or not moverkill) : continue
 
-                result.append( (s[0].name, self.OverTime(thp, s[1], s[0].IsOverkill() )) )
+                result.append( (s.member.name, self.OverTime(thp, s.damage, s.member.IsOverkill() )) )
                 i += 1
                 if limit <= i: break
 
         return result
 
-    def DefeatCount(self, damagelist):
+    def DefeatCount(self, damagelist : List[DamageControlMember]):
         defeatcount = 1
         dsum = 0
         for n in damagelist:
-            dsum += n[1]
+            dsum += n.damage
             if self.remainhp < dsum:
                 break
             defeatcount += 1
@@ -1027,15 +1058,15 @@ class DamageControl():
     def Status(self):
         mes = ''
 
-        def Compare(a : Tuple[ClanMember, int], b : Tuple[ClanMember, int]):
-            ao = a[0].IsOverkill()
-            bo = b[0].IsOverkill()
+        def Compare(a : DamageControlMember, b : DamageControlMember):
+            ao = a.member.IsOverkill()
+            bo = b.member.IsOverkill()
 
-            if ao == bo: return sign(b[1] - a[1])
+            if ao == bo: return sign(b.damage - a.damage)
             return sign(bo - ao)
 
-        damagelist = sorted([(key, value) for key, value in self.members.items()], key=cmp_to_key(Compare)) 
-        totaldamage = sum([n[1] for n in damagelist])
+        damagelist = sorted([value for value in self.members.values()], key=cmp_to_key(Compare)) 
+        totaldamage = sum([n.damage for n in damagelist])
 
         mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
         if 0 < totaldamage and totaldamage < self.remainhp:
@@ -1044,20 +1075,24 @@ class DamageControl():
             defeatcount = self.DefeatCount(damagelist)
             if 3 <= defeatcount:
                 last = damagelist[defeatcount - 1]
-                mes += '\n' + '→'.join([damagelist[i][0].name for i in range(defeatcount) ])
-                prevdamage = sum([damagelist[i][1] for i in range(defeatcount - 1) ])
-                mes += ' %d秒' % self.OverTime(self.remainhp - prevdamage, last[1], last[0].IsOverkill() )
+                mes += '\n' + '→'.join([damagelist[i].member.name for i in range(defeatcount) ])
+                prevdamage = sum([damagelist[i].damage for i in range(defeatcount - 1) ])
+                mes += ' %d秒' % self.OverTime(self.remainhp - prevdamage, last.damage, last.member.IsOverkill() )
 
         for m in damagelist:
-            mes += '\n%s%s:%d' % (m[0].name, '[o]' if m[0].IsOverkill() else '', m[1])
-            if self.remainhp <= m[1]:
-                mes += ' %d秒' % (self.OverTime(self.remainhp, m[1], m[0].IsOverkill()))
+            if m.status == 0:
+                mes += '\n%s %d' % (m.member.DecoName('n[so]'), m.damage)
+            else:
+                mes += '\n%s 通過' % (m.member.DecoName('n[so]'))
+                
+            if self.remainhp <= m.damage:
+                mes += ' %d秒' % (self.OverTime(self.remainhp, m.damage, m.member.IsOverkill()))
             else :
                 dinfo = self.DefeatInfomation(damagelist, m)
                 if 0 < len(dinfo):
                     mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
                 else:
-                    mes += '  残り %d' % (self.remainhp - m[1])
+                    mes += '  残り %d' % (self.remainhp - m.damage)
 
         return mes
 
@@ -1721,7 +1756,12 @@ class Clan():
         mes = ''
 
         ttime = datetime.datetime.now() + datetime.timedelta(hours = -1)
-        active = [m for m in self.members.values() if ttime < m.lastactive]
+        active = [m for m in self.members.values() if ttime < m.lastactive and m.SortieCount() < MAX_SORITE]
+
+        def Compare(a : ClanMember, b : ClanMember):
+            return sign(a.SortieCount() - b.SortieCount())
+
+        active = sorted(active, key=cmp_to_key(Compare))
 
         for m in active:
             mes += '%s: %d凸' % (m.name, m.SortieCount())
@@ -2136,7 +2176,7 @@ class Clan():
             count[member.SortieCount()].append(member)
             attackcount += member.SortieCount()
 
-        attacklist = [m.name for m in self.members.values() if m.attack]
+        attacklist = [m.DecoName('n[so]') for m in self.members.values() if m.attack]
         if 0 < len(attacklist):
             s += '攻撃中\n' + ' '.join(attacklist) + '\n'
 
@@ -2146,8 +2186,8 @@ class Clan():
             an = a.Overboss()
             bn = b.Overboss()
             if (an - bn) % BOSSNUMBER == 0: 
-                return an - bn
-            return (an % BOSSNUMBER) - (bn % BOSSNUMBER)
+                return sign(an - bn)
+            return sign(an % BOSSNUMBER) - (bn % BOSSNUMBER)
 
         overkilllist = sorted(oklist, key=cmp_to_key(Compare))
         oknum = len(overkilllist)
@@ -2176,8 +2216,9 @@ class Clan():
 
         for i, c in enumerate(count):
             if 0 < len(c):
+                slist = sorted(c, key=lambda member : member.lastactive, reverse=True)
                 s += '%d回目 %d人\n' % (i, len(c))
-                s += '  '.join([m.AttackName() for m in c]) + '\n'
+                s += '  '.join([m.DecoName('nOT') for m in slist]) + '\n'
         
         routedisplay = False
         bossroute = [[], [], [], [], []]
