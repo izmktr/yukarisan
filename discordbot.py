@@ -959,7 +959,7 @@ class DamageControlMember:
 
     def __init__(self, member : ClanMember, damage : int) -> None:
         self.member : ClanMember = member
-        self.damage = 0
+        self.damage = damage
         self.status = 0
 
 class DamageControl():
@@ -1051,7 +1051,8 @@ class DamageControl():
             dsum += n.damage
             if self.remainhp < dsum:
                 break
-            defeatcount += 1
+            if 0 < n.damage and n.status == 0:
+                defeatcount += 1
         
         return defeatcount
 
@@ -1084,15 +1085,16 @@ class DamageControl():
                 mes += '\n%s %d' % (m.member.DecoName('n[so]'), m.damage)
             else:
                 mes += '\n%s 通過' % (m.member.DecoName('n[so]'))
-                
-            if self.remainhp <= m.damage:
-                mes += ' %d秒' % (self.OverTime(self.remainhp, m.damage, m.member.IsOverkill()))
-            else :
-                dinfo = self.DefeatInfomation(damagelist, m)
-                if 0 < len(dinfo):
-                    mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
-                else:
-                    mes += '  残り %d' % (self.remainhp - m.damage)
+
+            if m.status == 0:
+                if self.remainhp <= m.damage:
+                    mes += ' %d秒' % (self.OverTime(self.remainhp, m.damage, m.member.IsOverkill()))
+                else :
+                    dinfo = self.DefeatInfomation(damagelist, m)
+                    if 0 < len(dinfo):
+                        mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
+                    else:
+                        mes += '  残り %d' % (self.remainhp - m.damage)
 
         return mes
 
@@ -1224,7 +1226,7 @@ class Clan():
             (['pd'], self.PhantomDamage),
             (['dtest'], self.DamageTest),
             (['route', 'ルート'], self.Route),
-            (['allroute', 'ルート'], self.AllRoute),
+            (['allroute', '全ルート'], self.AllRoute),
             (['clanattack'], self.AllClanAttack),
             (['clanreport'], self.AllClanReport),
             (['active', 'アクティブ'], self.ActiveMember),
