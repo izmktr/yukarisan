@@ -498,15 +498,33 @@
             "startdate": "2020/10/31 12:00:00",
             "gachatype": "3",
             "name": "\u30e2\u30cb\u30ab(\u30de\u30b8\u30ab\u30eb)"
+        },
+        {
+            "startdate": "2020/11/10 12:00:00",
+            "gachatype": "p",
+            "name": [
+                "\u30ec\u30e0",
+                "\u30a8\u30df\u30ea\u30a2"
+            ]
+        },
+        {
+            "startdate": "2020/11/21 15:00:00",
+            "gachatype": "3",
+            "name": "\u30c8\u30e2(\u30de\u30b8\u30ab\u30eb)"
+        },
+        {
+            "startdate": "2020/11/30 12:00:00",
+            "gachatype": "l",
+            "name": "\u30a2\u30ad\u30ce(\u30af\u30ea\u30b9\u30de\u30b9)"
         }
     ],
     "BossName": [
-        "\u30b4\u30d6\u30ea\u30f3\u30b0\u30ec\u30fc\u30c8",
-        "\u30e9\u30a4\u30e9\u30a4",
-        "\u30aa\u30fc\u30af\u30c1\u30fc\u30d5",
-        "\u30aa\u30d6\u30b7\u30c0\u30f3\u30ef\u30a4\u30d0\u30fc\u30f3",
-        "\u30ec\u30b5\u30c8\u30d1\u30eb\u30c8"
+        "\u30ef\u30a4\u30d0\u30fc\u30f3",
+        "\u30ef\u30a4\u30eb\u30c9\u30b0\u30ea\u30d5\u30a9\u30f3",
+        "\u30b9\u30ab\u30a4\u30ef\u30eb\u30ad\u30e5\u30fc\u30ec",
+        "\u30de\u30b9\u30bf\u30fc\u30fb\u30bb\u30f3\u30ea",
+        "\u30b5\u30b8\u30bf\u30ea\u30a6\u30b9"
     ],
-    "BATTLESTART": "10/26",
-    "BATTLEEND": "10/30"
+    "BATTLESTART": "12/26",
+    "BATTLEEND": "12/30"
 }
