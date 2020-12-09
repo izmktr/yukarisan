@@ -516,6 +516,16 @@
             "startdate": "2020/11/30 12:00:00",
             "gachatype": "l",
             "name": "\u30a2\u30ad\u30ce(\u30af\u30ea\u30b9\u30de\u30b9)"
+        },
+        {
+            "startdate": "2020/12/10 12:00:00",
+            "gachatype": "p",
+            "name": [
+                "\u30c1\u30ab(\u30af\u30ea\u30b9\u30de\u30b9)",
+                "\u30a2\u30e4\u30cd(\u30af\u30ea\u30b9\u30de\u30b9)",
+                "\u30a4\u30ea\u30e4(\u30af\u30ea\u30b9\u30de\u30b9)",
+                "\u30af\u30ea\u30b9\u30c6\u30a3\u30fc\u30ca(\u30af\u30ea\u30b9\u30de\u30b9)"
+            ]
         }
     ],
     "BossName": [
