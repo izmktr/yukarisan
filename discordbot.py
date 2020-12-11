@@ -387,6 +387,7 @@ class Gacha():
             num += 1
         
         return message
+        
     @staticmethod
     def Lottery(box : List[T], leaststar = 1) -> T:
         rndstar = random.random() * 100
@@ -801,6 +802,26 @@ class ClanMember():
             overkill += ' %s' % (self.Memo())
         return overkill
 
+    def ChangeableTime(self, time):
+        if time == 0: return True
+
+        l = len(self.history)
+        if 1 <= l and 0 < self.history[-1]['overtime']: return True
+        if l == 1: return True
+        if 2 <= l and self.history[-2]['overtime'] == 0: return True
+
+        return False
+
+    def ChangeOvertime(self, time):
+        if len(self.history) == 0:
+            return '前の凸がありません'
+        
+        if self.ChangeableTime(time):
+            self.history[-1]['overtime'] = time
+        else:
+            return '前の凸が持ち越しです'
+        return None
+
     def AttackName(self):
         s = self.name
         if (self.IsOverkill()):
@@ -1206,6 +1227,7 @@ class Clan():
             (['memberlist'], self.MemberList),
             (['reset'], self.MemberReset),
             (['history'], self.History),
+            (['overtime', '持ち越し時間'], self.OverTime),
             (['gachaadd'], self.GachaAdd),
             (['gachadelete'], self.GachaDelete),
             (['gachalist'], self.GachaList),
@@ -1479,6 +1501,23 @@ class Clan():
             else:
                 await message.channel.send('メンバーがいません')
         return False
+
+    async def OverTime(self, message, member : ClanMember, opt):
+        try:
+            time = int(opt)
+            if time < 0 or 90 < time:
+                raise ValueError
+            errmes = member.ChangeOvertime(time)
+            if errmes is not None:
+                await message.channel.send(errmes)
+                return False
+            await message.channel.send('持ち越し時間を%d秒にしました' % time)
+            return True
+        except ValueError:
+            await message.channel.send('時間が読み取れません')
+            return False
+
+        return True
 
     async def Gacha(self, message, member : ClanMember, opt):
         self.CheckOptionNone(opt)
@@ -3062,7 +3101,11 @@ async def loop():
                     clan.lastmessage = None
                 Clan.Save(clan, guildid)
 
-                Outlog(ERRFILE, '%s flag:%s inputvarid:%s' % (clan.guild.name, resetflag, clan.inputchannel is not None))
+                cstr = 'input:ok'
+                if clan.inputchannel is None:
+                    cstr = 'input:ng channellen: %d' % len(clan.guild.channels)
+
+                Outlog(ERRFILE, '%s flag:%s %s' % (clan.guild.name, resetflag, cstr))
             except Exception as e:
                 Outlog(ERRFILE, 'error: %s e.args:%s' % (clan.guild.name, e.args))
 
