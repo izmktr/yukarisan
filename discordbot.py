@@ -387,7 +387,7 @@ class Gacha():
             num += 1
         
         return message
-        
+       
     @staticmethod
     def Lottery(box : List[T], leaststar = 1) -> T:
         rndstar = random.random() * 100
@@ -1145,7 +1145,7 @@ class DamageControl():
                 self.outputlock = 1
                 try:
                     await self.lastmessage.delete()
-                except discord.errors.NotFound:
+                except (discord.errors.NotFound, discord.errors.Forbidden):
                     pass
                 self.lastmessage = None
 
@@ -1326,7 +1326,7 @@ class Clan():
         for emoji in reactemojis:
             try:
                 await message.remove_reaction(emoji, me)
-            except discord.errors.NotFound:
+            except (discord.errors.NotFound, discord.errors.Forbidden):
                 break
 
     async def RemoveReactionNotCancel(self, message, overkill : bool, me):
@@ -1336,7 +1336,7 @@ class Clan():
             if emoji != u"\u274C":
                 try:
                     await message.remove_reaction(emoji, me)
-                except discord.errors.NotFound:
+                except (discord.errors.NotFound, discord.errors.Forbidden):
                     break
 
     async def SetNotice(self, member : ClanMember, message : discord.Message, bossstr : str):
@@ -3271,7 +3271,7 @@ async def Output(clan : Clan, message : str):
                 clan.outputlock = 1
                 try:
                     await clan.lastmessage.delete()
-                except discord.errors.NotFound:
+                except (discord.errors.NotFound, discord.errors.Forbidden):
                     pass
                 clan.lastmessage = None
 
