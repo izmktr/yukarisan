@@ -19,12 +19,13 @@ BATTLEPRESTART = '06/24'
 BATTLESTART = '06/25'
 BATTLEEND = '06/29'
 
-LevelUpLap = [4, 11, 35]
+LevelUpLap = [4, 11, 35, 45]
 BossHpData = [
     [   [600, 1.2], [800, 1.2], [1000, 1.3], [1200, 1.4], [1500, 1.5]   ],
     [   [600, 1.6], [800, 1.6], [1000, 1.8], [1200, 1.9], [1500, 2.0],  ],
     [   [700, 2.0], [900, 2.0], [1300, 2.4], [1500, 2.4], [2000, 2.6],  ],
     [   [1700, 3.5], [1800, 3.5], [2000, 3.7], [2100, 3.8], [2300, 4.0], ],
+    [   [8500, 3.5], [9000, 3.5], [9500, 3.7], [100000, 3.8], [11000, 4.0], ],
 ]
 
 GachaLotData = [
@@ -1223,8 +1224,10 @@ class Clan():
             (['nextboss'], self.NextBoss),
             (['setboss'], self.SetBoss),
             (['notice', '通知'], self.Notice),
+            (['reserve', '予約'], self.Reserve),
             (['refresh'], self.Refresh),
             (['memberlist'], self.MemberList),
+            (['channellist'], self.ChannelList),
             (['reset'], self.MemberReset),
             (['history'], self.History),
             (['overtime', '持ち越し時間'], self.OverTime),
@@ -1348,6 +1351,9 @@ class Clan():
             mark = self.numbermarks[member.notice]
 
         await message.add_reaction(mark)
+
+    async def Reserve(self, member : ClanMember, message : discord.Message, bossstr : str):
+        pass
 
     async def MemberRefresh(self):
         if self.guild is None: return
@@ -1479,13 +1485,24 @@ class Clan():
         return True
 
     async def MemberList(self, message, member : ClanMember, opt):
-        await message.channel.send('len %d' % (len(message.guild.members)))
 
-        for m in message.guild.members:
-            await message.channel.send('%s' % (m.name))
+        if 0 < len(message.guild.members):
+            await message.channel.send('\n'.join([m.name for m in message.guild.members]))
+        else:
+            await message.channel.send('len(message.guild.members):%d' % len(message.guild.members))
 
         return False
 
+    async def ChannelList(self, message, member : ClanMember, opt):
+        mes = ''
+        mes += 'len %d\n' % (len(message.guild.channels))
+
+        for m in message.guild.channels:
+            mes += '%s/%s\n' % (m.name, m.name == inputchannel)
+
+        await message.channel.send(mes)
+
+        return False
 
     async def CmdReset(self, message, member : ClanMember, opt):
         member.Reset()
@@ -3036,6 +3053,7 @@ class PrivateMessage:
 # 接続に必要なオブジェクトを生成
 intents = discord.Intents.default()  # デフォルトのIntentsオブジェクトを生成
 intents.typing = False  # typingを受け取らないように
+intents.members = True  # membersを受け取る
 client = discord.Client(intents=intents)
 
 clanhash: Dict[int, Clan] = {}
