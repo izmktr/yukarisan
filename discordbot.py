@@ -23,9 +23,9 @@ LevelUpLap = [4, 11, 35, 45]
 BossHpData = [
     [   [600, 1.2], [800, 1.2], [1000, 1.3], [1200, 1.4], [1500, 1.5]   ],
     [   [600, 1.6], [800, 1.6], [1000, 1.8], [1200, 1.9], [1500, 2.0],  ],
-    [   [700, 2.0], [900, 2.0], [1300, 2.4], [1500, 2.4], [2000, 2.6],  ],
+    [   [700, 2.0], [900, 2.0], [1200, 2.4], [1500, 2.4], [2000, 2.6],  ],
     [   [1700, 3.5], [1800, 3.5], [2000, 3.7], [2100, 3.8], [2300, 4.0], ],
-    [   [8500, 3.5], [9000, 3.5], [9500, 3.7], [100000, 3.8], [11000, 4.0], ],
+    [   [8500, 3.5], [9000, 3.5], [9500, 3.7], [10000, 3.8], [11000, 4.0], ],
 ]
 
 GachaLotData = [
@@ -979,14 +979,15 @@ class ClanMember():
 
 class DamageControlMember:
 
-    def __init__(self, member : ClanMember, damage : int) -> None:
+    def __init__(self, member : ClanMember, damage : int, message : str = '') -> None:
         self.member : ClanMember = member
         self.damage = damage
         self.status = 0
+        self.message = message
 
 class DamageControl():
 
-    def __init__(self):
+    def __init__(self, clanmembers : Dict[int, ClanMember]):
         self.active = False
         self.lastmessage = None
         self.channel = None
@@ -994,6 +995,7 @@ class DamageControl():
         self.bossindex = 0
         self.members : Dict[ClanMember, DamageControlMember] = {}
         self.outputlock = 0
+        self.clanmembers : Dict[int, ClanMember]= clanmembers
 
     def SetChannel(self, channel):
         self.channel = channel
@@ -1003,15 +1005,21 @@ class DamageControl():
         self.bossindex = bossindex
         self.remainhp = hp
 
-    def Damage(self, member : ClanMember, damage : int):
-        self.members[member] = DamageControlMember(member, damage)
+    def Damage(self, member : ClanMember, damage : int, message : str = ''):
+        self.members[member] = DamageControlMember(member, damage, message)
+
+    def MemberSweep(self):
+        if len([m for m in self.members.values() if m.status == 0]) == 0:
+            self.members.clear()
 
     async def Remove(self, member : ClanMember):
         if not self.active: return
 
         if member in self.members:
             del self.members[member]
-            await self.SendResult()
+            self.MemberSweep()
+
+        await self.SendResult()
 
     async def Injure(self, member : ClanMember):
         if not self.active: return
@@ -1023,7 +1031,9 @@ class DamageControl():
             m.damage = 0
             m.status = 1
 
-            await self.SendResult()
+            self.MemberSweep()
+
+        await self.SendResult()
 
     def IsAutoExecutive(self):
         if self.channel is None: return False
@@ -1071,7 +1081,7 @@ class DamageControl():
         dsum = 0
         for n in damagelist:
             dsum += n.damage
-            if self.remainhp < dsum:
+            if self.remainhp <= dsum:
                 break
             if 0 < n.damage and n.status == 0:
                 defeatcount += 1
@@ -1091,6 +1101,8 @@ class DamageControl():
         damagelist = sorted([value for value in self.members.values()], key=cmp_to_key(Compare)) 
         totaldamage = sum([n.damage for n in damagelist])
 
+        attackmember = set([m for m in self.clanmembers.values() if m.attack])
+
         mes += '%s HP %d' % (BossName[self.bossindex] , self.remainhp)
         if 0 < totaldamage and totaldamage < self.remainhp:
             mes += '  不足分 %d' % (self.remainhp - totaldamage)
@@ -1098,17 +1110,25 @@ class DamageControl():
             defeatcount = self.DefeatCount(damagelist)
             if 3 <= defeatcount:
                 last = damagelist[defeatcount - 1]
-                mes += '\n' + '→'.join([damagelist[i].member.name for i in range(defeatcount) ])
+                namelist = []
+
+                remainhp = self.remainhp
+                for m in damagelist:
+                    remainhp -= m.damage
+                    if 0 < remainhp:
+                        namelist.append(m.member.name + '[%d]' % remainhp)
+                
+                namelist.append(last.member.name)
+
+                mes += '\n' + '→'.join(namelist)
                 prevdamage = sum([damagelist[i].damage for i in range(defeatcount - 1) ])
                 mes += ' %d秒' % self.OverTime(self.remainhp - prevdamage, last.damage, last.member.IsOverkill() )
 
         for m in damagelist:
             if m.status == 0:
-                mes += '\n%s %d' % (m.member.DecoName('n[so]'), m.damage)
-            else:
-                mes += '\n%s 通過' % (m.member.DecoName('n[so]'))
+                attackmember.discard(m.member)
 
-            if m.status == 0:
+                mes += '\n%s %d' % (m.member.DecoName('n[so]'), m.damage)
                 if self.remainhp <= m.damage:
                     mes += ' %d秒' % (self.OverTime(self.remainhp, m.damage, m.member.IsOverkill()))
                 else :
@@ -1117,7 +1137,14 @@ class DamageControl():
                         mes += ''. join(['  →%s %d秒' % (d[0], d[1]) for d in dinfo])
                     else:
                         mes += '  残り %d' % (self.remainhp - m.damage)
+        
+        finishmember = [m.member.DecoName('n[so]') for m in damagelist if m.status != 0]
 
+        if 0 < len(finishmember):
+            mes += '\n通過済み %s' % (' '.join(finishmember))
+
+        if 0 < len(attackmember):
+            mes += '\n未報告 %s' % (' '.join([m.DecoName('n[so]') for m in attackmember]))
         return mes
 
     async def SendResult(self):
@@ -1207,7 +1234,7 @@ class Clan():
         self.inputchannel = None
         self.outputchannel = None
 
-        self.damagecontrol = DamageControl()
+        self.damagecontrol = DamageControl(self.members)
 
         self.admin = False
 
@@ -1977,6 +2004,7 @@ class Clan():
             member = self.GetMember(message.author)
             if member.attack:
                 try:
+
                     dmg = int(message.content)
                     if 0 <= dmg:
                         await self.Damage(message, member, message.content)
