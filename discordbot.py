@@ -1229,6 +1229,7 @@ class Clan():
         self.lap = {0 : 0.0}
         self.defeatlist = []
         self.attacklist = []
+        self.namedelimiter = ''
 
         self.guild : discord.Guild = None
         self.inputchannel = None
@@ -1255,6 +1256,10 @@ class Clan():
             (['refresh'], self.Refresh),
             (['memberlist'], self.MemberList),
             (['channellist'], self.ChannelList),
+            (['namedelimiter'], self.NameDelimiter),
+            (['memberinitialize'], self.MemberInitialize),
+            (['setmemberrole'], self.SetMemberRole),
+            (['role'], self.Role),
             (['reset'], self.MemberReset),
             (['history'], self.History),
             (['overtime', '持ち越し時間'], self.OverTime),
@@ -1282,6 +1287,7 @@ class Clan():
             (['clanattack'], self.AllClanAttack),
             (['clanreport'], self.AllClanReport),
             (['active', 'アクティブ'], self.ActiveMember),
+            (['gcmd'], self.GuildCommand),
         ]
 
     def GetMember(self, author) -> ClanMember:
@@ -1289,7 +1295,7 @@ class Clan():
         if (member is None):
             member = ClanMember()
             self.members[author.id] = member
-        member.name = author.display_name
+        member.name = self.DelimiterErase(author.display_name)
         member.mention = author.mention
         return member
 
@@ -1530,6 +1536,70 @@ class Clan():
         await message.channel.send(mes)
 
         return False
+
+    def DelimiterErase(self, name : str):
+        if self.namedelimiter is None:
+            return name
+
+        npos = name.find(self.namedelimiter)
+        if npos < 0:
+            return name
+        return name[0:npos]
+
+    async def NameDelimiter(self, message, member : ClanMember, opt):
+        self.namedelimiter = None  if opt == '' else opt
+
+        for m in self.guild.members:
+            if m.id in self.members:
+                self.members[m.id].name = self.DelimiterErase(m.display_name)
+
+        if self.namedelimiter is None:
+            mes = 'デリミタをデフォルトに戻しました'
+        else:
+            mes = 'デリミタを%sに設定しました' % self.namedelimiter
+
+        await message.channel.send(mes)
+
+        return True
+
+    async def MemberInitialize(self, message, member : ClanMember, opt):
+        if not message.author.guild_permissions.administrator: return False
+
+        self.members.clear()
+        await message.channel.send('メンバーを全て削除しました')
+
+        return True
+
+    async def SetMemberRole(self, message, member : ClanMember, opt):
+        rolelist = [role for role in self.guild.roles if opt in role.name]
+
+        if len(rolelist) == 0:
+            await message.channel.send('Roleが見つかりません')
+            return False
+        elif 2 <= len(rolelist):
+            await message.channel.send('Roleが複数あります %s' % (','.join([m.name for m in rolelist])) )
+            return False
+
+        role = rolelist[0]
+        if len(role.members) == 0:
+            await message.channel.send('Roleメンバーが0人です')
+            return False
+
+        self.members.clear()
+
+        for m in role.members:
+            if not m.bot:
+                self.GetMember(m)
+
+        await message.channel.send('%s のRoleのメンバーを登録しました' % role.name)
+
+        return True
+
+    async def Role(self, message, member : ClanMember, opt):
+        rolelist = [('%s:%s' %(role.name, ','.join([m.name for m in role.members]))) for role in self.guild.roles]
+        await message.channel.send('\n'.join(rolelist))
+
+        return True
 
     async def CmdReset(self, message, member : ClanMember, opt):
         member.Reset()
@@ -1855,6 +1925,29 @@ class Clan():
             mes += '\n'
 
         await channel.send(mes)
+        return False
+
+    async def GuildList(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        guildname = opt
+
+        global client
+
+        if guildname == '':
+            guildlist = [(idx, guild) for idx, guild in enumerate(client.guilds) if idx < 10]
+        else:
+            guildlist = [(idx, guild) for idx, guild in enumerate(client.guilds) if guildname in guild.name]
+
+        await message.channel.send('\n'.join(['%d:%s' % (m[0], m[1].name) for m in guildlist]))
+
+        return False
+
+    async def GuildCommand(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
         return False
 
     async def Remain(self, message, member : ClanMember, opt):
@@ -2253,7 +2346,13 @@ class Clan():
 
     def Status(self):
         s = ''
-        s += '現在 %d-%d %s\n' % (self.BossLap(), self.BossIndex() + 1, BossName[self.BossIndex()])
+        hpinfo = ''
+        if self.damagecontrol.active:
+            enemyhp = BossHpData[self.BossLevel() - 1][self.BossIndex()][0]
+            if self.damagecontrol.remainhp < enemyhp:
+                hpinfo = '[%d/%d]' % (self.damagecontrol.remainhp, enemyhp)
+
+        s += '現在 %d-%d %s%s\n' % (self.BossLap(), self.BossIndex() + 1, BossName[self.BossIndex()], hpinfo)
 
         attackcount = 0
         count : List[List[ClanMember]] = [[], [], [], []]
@@ -2334,6 +2433,7 @@ class Clan():
             'lap' : clan.lap,
             'defeatlist' : clan.defeatlist,
             'attacklist' : clan.attacklist,
+            'namedelimiter' : clan.namedelimiter,
             'admin' : clan.admin,
         }
 
@@ -2350,6 +2450,7 @@ class Clan():
 
             clan = Clan(mdic['channelid'])
             clan.bosscount = mdic['bosscount']
+            clan.namedelimiter = mdic['namedelimiter'] if 'namedelimiter' in mdic else None
 
             if 'beforesortie' in mdic:
                 clan.beforesortie = mdic['beforesortie']
