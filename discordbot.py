@@ -23,7 +23,7 @@ LevelUpLap = [4, 11, 35, 45]
 BossHpData = [
     [   [600, 1.2], [800, 1.2], [1000, 1.3], [1200, 1.4], [1500, 1.5]   ],
     [   [600, 1.6], [800, 1.6], [1000, 1.8], [1200, 1.9], [1500, 2.0],  ],
-    [   [700, 2.0], [900, 2.0], [1200, 2.4], [1500, 2.4], [2000, 2.6],  ],
+    [   [700, 2.0], [900, 2.0], [1300, 2.4], [1500, 2.4], [2000, 2.6],  ],
     [   [1700, 3.5], [1800, 3.5], [2000, 3.7], [2100, 3.8], [2300, 4.0], ],
     [   [8500, 3.5], [9000, 3.5], [9500, 3.7], [10000, 3.8], [11000, 4.0], ],
 ]
@@ -1005,6 +1005,10 @@ class DamageControl():
         self.bossindex = bossindex
         self.remainhp = hp
 
+    async def TryDisplay(self):
+        if 0 < len(self.members):
+             await self.SendResult()
+
     def Damage(self, member : ClanMember, damage : int, message : str = ''):
         self.members[member] = DamageControlMember(member, damage, message)
 
@@ -1015,11 +1019,13 @@ class DamageControl():
     async def Remove(self, member : ClanMember):
         if not self.active: return
 
+        resultflag = 0 < len(self.members)
         if member in self.members:
             del self.members[member]
             self.MemberSweep()
 
-        await self.SendResult()
+        if resultflag:
+            await self.SendResult()
 
     async def Injure(self, member : ClanMember):
         if not self.active: return
@@ -1033,7 +1039,8 @@ class DamageControl():
 
             self.MemberSweep()
 
-        await self.SendResult()
+        if 0 < len(self.members):
+             await self.SendResult()
 
     def IsAutoExecutive(self):
         if self.channel is None: return False
@@ -1459,6 +1466,7 @@ class Clan():
                 try:
                     enemyhp = BossHpData[self.BossLevel() - 1][self.BossIndex()][0]
                     self.damagecontrol.RemainHp(self.BossIndex(), enemyhp)
+                    await self.damagecontrol.TryDisplay()
                 except IndexError:
                     pass
 
@@ -2363,7 +2371,7 @@ class Clan():
 
         attacklist = [m.DecoName('n[so]') for m in self.members.values() if m.attack]
         if 0 < len(attacklist):
-            s += '攻撃中\n' + ' '.join(attacklist) + '\n'
+            s += '攻撃中 %d人\n' % (len(attacklist)) + ' '.join(attacklist) + '\n'
 
         oklist = [m for m in self.members.values() if m.IsOverkill()]
 
