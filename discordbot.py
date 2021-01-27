@@ -1029,6 +1029,9 @@ class DamageControl():
 
     async def Injure(self, member : ClanMember):
         if not self.active: return
+        
+        resultflag = 0 < len(self.members)
+
         if member in self.members:
             m = self.members[member]
             self.remainhp -= m.damage
@@ -1039,7 +1042,7 @@ class DamageControl():
 
             self.MemberSweep()
 
-        if 0 < len(self.members):
+        if resultflag:
              await self.SendResult()
 
     def IsAutoExecutive(self):
