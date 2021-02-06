@@ -71,13 +71,18 @@ nextbossでボスを進めて、prevbossでボスを戻す
 - active  
 1時間以内にdiscordに書き込んだ人で、2凸以下の人を表示する  
 
+- attacklog  
+- defeatlog  
+ClanBattleDefeatLogViewer[https://github.com/izmktr/ClanBattleDefeatLogViewer]用のログを出力します。  
+
+
 ## ダメコン関連
 
 凸している人がダメージを管理する機能です。  
 基本的にメインでチャットしているチャンネルで、使用することを前提に設計されています。
 
 - remain/残り  
-ボスのHPを設定する
+ボスのHPを設定する  
 「@ユカリさん 残り 1000」という風に、別チャンネルで報告すると、  
 このコマンドを打ち込んだチャンネルがダメコンチャンネルとして登録される  
 すでにダメコンチャンネルが設定されている場合、2人以上が凸している状態で  
