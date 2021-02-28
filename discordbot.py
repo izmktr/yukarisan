@@ -1297,6 +1297,9 @@ class Clan():
             (['clanattack'], self.AllClanAttack),
             (['clanreport'], self.AllClanReport),
             (['active', 'アクティブ'], self.ActiveMember),
+            (['servermessage'], self.ServerMessage),
+            (['serverleave'], self.ServerLeave),
+            (['inputerror'], self.InputError),
             (['gcmd'], self.GuildCommand),
         ]
 
@@ -1451,7 +1454,7 @@ class Clan():
         return True
 
     def AttackNum(self):
-        return len([m for m in clan.members.values() if m.attack])
+        return len([m for m in self.members.values() if m.attack])
 
     async def Attack(self, message, member : ClanMember, opt):
         self.CheckOptionNone(opt)
@@ -1938,6 +1941,68 @@ class Clan():
         await channel.send(mes)
         return False
 
+    async def InputError(self, message, member : ClanMember, opt):
+        for clan in clanhash.values():
+            clan.SetInputChannel()
+            if clan.inputchannel is None:
+                await message.channel.send('%s[%d]' % (clan.guild.name, clan.guild.id))
+
+        return False
+
+    async def ServerMessage(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        s = opt.split(' ')
+
+        if len(s) < 2:
+            await message.channel.send('オプションがありません')
+            return False
+
+        try:
+            gindex = int(s[0])
+        except ValueError:
+            await message.channel.send('guildidが違います')
+            return False
+
+        if gindex in clanhash:
+            clan = clanhash[gindex]
+
+            clan.SetInputChannel()
+            if clan.inputchannel is None:
+                await message.channel.send('inputchannel が設定されていません')
+                return False
+            
+            await clan.inputchannel.send(s[1])
+        else:
+            await message.channel.send('guildがありません')
+        
+        return False
+
+    async def ServerLeave(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        try:
+            gindex = int(opt)
+        except ValueError:
+            await message.channel.send('guildidが違います')
+            return False
+
+        if gindex in clanhash:
+            clan = clanhash[gindex]
+
+            await clan.guild.leave()
+            return False
+
+        guildlist = [g for g in client.guilds if g.id == gindex]
+        if 1 <= len(guildlist):
+            await guildlist[0].leave()
+            return False
+
+        await message.channel.send('guildがありません')
+        return False
+
     async def GuildList(self, message, member : ClanMember, opt):
         if not self.admin: return False
         if not message.author.guild_permissions.administrator: return False
@@ -2333,6 +2398,21 @@ class Clan():
                 return (self.lap[nowlap] - self.lap[baselap] ) / i
 
         return 0
+
+    def BossAverage(self, bossindex):
+        nowlap = self.bosscount // BOSSNUMBER
+        if nowlap == 0 or nowlap not in self.lap:
+            return 0
+
+        lvup = self.GetLevelUpLap(nowlap)
+
+        defeatlist = [(self.lap[l - 2] - self.lap[l - 1])
+            for l in range(lvup * BOSSNUMBER + bossindex - 1, self.bosscount, BOSSNUMBER)]
+
+        if len(defeatlist) == 0:
+            return 0
+
+        return sum(defeatlist) / len(defeatlist)
 
     def BossIndex(self):
         return self.bosscount % BOSSNUMBER
