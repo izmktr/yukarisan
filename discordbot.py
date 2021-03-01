@@ -1299,6 +1299,7 @@ class Clan():
             (['active', 'アクティブ'], self.ActiveMember),
             (['servermessage'], self.ServerMessage),
             (['serverleave'], self.ServerLeave),
+            (['zeroserverleave'], self.ZeroServerLeave),
             (['inputerror'], self.InputError),
             (['gcmd'], self.GuildCommand),
         ]
@@ -1552,7 +1553,7 @@ class Clan():
         return False
 
     def DelimiterErase(self, name : str):
-        if self.namedelimiter is None:
+        if self.namedelimiter is None or self.namedelimiter = "":
             return name
 
         npos = name.find(self.namedelimiter)
@@ -1914,8 +1915,11 @@ class Clan():
             if clan is not None:
                 mes += clan.Status() + '\n'
 
+        dt_now = datetime.datetime.now()
+        filename = 'report_%s.txt' % dt_now.strftime("%Y%m%d_%H%M")  
+        
         with StringIO(mes) as bs:
-            await channel.send(file=discord.File(bs, 'report.txt'))
+            await channel.send(file=discord.File(bs, filename))
 
         return False
 
@@ -2001,6 +2005,21 @@ class Clan():
             return False
 
         await message.channel.send('guildがありません')
+        return False
+
+    async def ZeroServerLeave(self, message, member : ClanMember, opt):
+        if not self.admin: return False
+        if not message.author.guild_permissions.administrator: return False
+
+        server = []
+
+        for clan in clanhash.values():
+            if clan.bosscount == 0:
+                server.append(clan.guild)
+
+        for clan in server:
+            await clan.leave()
+
         return False
 
     async def GuildList(self, message, member : ClanMember, opt):
