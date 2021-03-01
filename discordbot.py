@@ -1553,7 +1553,7 @@ class Clan():
         return False
 
     def DelimiterErase(self, name : str):
-        if self.namedelimiter is None or self.namedelimiter = "":
+        if self.namedelimiter is None or self.namedelimiter == "":
             return name
 
         npos = name.find(self.namedelimiter)
