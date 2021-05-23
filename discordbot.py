@@ -676,6 +676,38 @@ def Command(str, cmd):
         return str[length:].strip()
     return None
 
+class AttackHistory():
+    keyarray = [
+        'messageid',
+        'bosscount',
+        'overtime',
+        'defeat',
+        'sotiecount',
+        'memo'
+    ]
+
+    def __init__(self, messageid, bosscount, overtime, defeat, sotiecount):
+        self.messageid = messageid
+        self.bosscount = bosscount
+        self.overtime = overtime
+        self.defeat = defeat
+        self.sotiecount = sotiecount
+        self.memo = ''
+
+    @staticmethod
+    def Desrialize(dic):
+        history = AttackHistory(0, 0, 0, False, 0)
+        for key in AttackHistory.keyarray:
+            if key in dic:
+                history.__dict__[key] = dic[key]
+        return history
+
+    def Serialize(self):
+        dic = {}
+        for key in AttackHistory.keyarray:
+            dic[key] = self.__dict__[key]
+        return dic
+
 class ClanMember():
 
     def __init__(self):
@@ -683,7 +715,7 @@ class ClanMember():
         self.reportlimit = None
         self.name = ''
         self.taskkill = 0
-        self.history : List[Dict[str, Any]] = []
+        self.history : List[AttackHistory] = []
         self.boss = 0
         self.notice = None
         self.mention = ''
@@ -693,17 +725,8 @@ class ClanMember():
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat, sotiecount):
-        self.history.append(
-            {
-                'messageid': messageid,
-                'bosscount': bosscount,
-                'overtime': overtime,
-                'defeat' : defeat,
-                'sotiecount' : sotiecount,
-                'memo' : '',
-                'other' : [],
-            }
-        )
+
+        self.history.append(AttackHistory(messageid, bosscount, overtime, defeat, sotiecount))
 
     def Attack(self, clan, bossindex):
         self.attack = True
@@ -715,8 +738,8 @@ class ClanMember():
         count = 0.0
 
         for h in self.history:
-            if h['bosscount'] < (lap + 1) * BOSSNUMBER:
-                count += h['sotiecount']
+            if h.bosscount < (lap + 1) * BOSSNUMBER:
+                count += h.sortiecount
         if MAX_SORITE <= count:
             return MAX_SORITE
         return count
@@ -744,7 +767,7 @@ class ClanMember():
     def SortieCount(self):
         count = 0
         for h in self.history:
-            if h['overtime'] == 0:
+            if h.overtime == 0:
                  count += 1
         if MAX_SORITE <= count:
             return MAX_SORITE
@@ -766,32 +789,30 @@ class ClanMember():
     
     def Overtime(self):
         if (len(self.history) == 0): return 0
-        return self.history[-1]['overtime']
+        return self.history[-1].overtime
 
     def Overboss(self):
         if (len(self.history) == 0): return -1
-        return self.history[-1]['bosscount']
+        return self.history[-1].bosscount
 
     def Lastmessageid(self):
         if (len(self.history) == 0): return 0
-        return self.history[-1]['messageid']
+        return self.history[-1].messageid
 
     def Memo(self):
         if (len(self.history) == 0): return ''
-        if ('memo' in self.history[-1]):
-            return self.history[-1]['memo']
-        return ''
+        return self.history[-1].memo
 
     def SetMemo(self, memostr):
         if (len(self.history) == 0): return
-        self.history[-1]['memo'] = memostr.strip()
+        self.history[-1].memo = memostr.strip()
 
     def IsOverkill(self):
         return self.Overtime() != 0
     
     def MessageChcck(self, messageid):
         for h in self.history:
-            if (h['messageid'] == messageid):
+            if (h.messageid == messageid):
                 return True
         return False
 
@@ -816,9 +837,9 @@ class ClanMember():
         if time == 0: return True
 
         l = len(self.history)
-        if 1 <= l and 0 < self.history[-1]['overtime']: return True
+        if 1 <= l and 0 < self.history[-1].overtime: return True
         if l == 1: return True
-        if 2 <= l and self.history[-2]['overtime'] == 0: return True
+        if 2 <= l and self.history[-2].overtime == 0: return True
 
         return False
 
@@ -827,7 +848,7 @@ class ClanMember():
             return '前の凸がありません'
         
         if self.ChangeableTime(time):
-            self.history[-1]['overtime'] = time
+            self.history[-1].overtime = time
         else:
             return '前の凸が持ち越しです'
         return None
@@ -845,17 +866,17 @@ class ClanMember():
         count = 1
         for h in self.history:
             str += '%d回目 %d周目:%s' % (count,
-            h['bosscount'] // BOSSNUMBER + 1, 
-            BossName[h['bosscount'] % BOSSNUMBER])
+            h.bosscount // BOSSNUMBER + 1, 
+            BossName[h.bosscount % BOSSNUMBER])
 
-            if (h['defeat']):
-                str += ' %d秒' % (h['overtime'])
+            if h.defeat:
+                str += ' %d秒' % (h.overtime)
 
             str += '\n'
 
-            if (h['overtime'] == 0):
+            if (h.overtime == 0):
                 count += 1
-        if (str == '' ): str = '履歴がありません'
+        if str == '' : str = '履歴がありません'
         return str
 
     def GetUnfinishRoute(self):
@@ -869,35 +890,39 @@ class ClanMember():
             if before['defeat']:
                 time = before['overtime']
             else:
-                time = 110 - h['overtime']
+                time = 110 - h.overtime
 
             if 50 <= time:
-                attack.add(h['bosscount'] % BOSSNUMBER + 1)
+                attack.add(h.bosscount % BOSSNUMBER + 1)
             before = h
         
         return list(route - attack)
 
     def Serialize(self):
         ret = {}
-        selializemember = ['attack', 'name', 'taskkill', 'history', 'boss', 'notice', 'gacha', 'route']
+        selializemember = ['attack', 'name', 'taskkill', 'boss', 'notice', 'gacha', 'route']
 
         for key, value in self.__dict__.items():
             if key in selializemember:
                 ret[key] = value
-
+        
+        ret['history'] = [m.Serialize() for m in self.history]
         return ret
 
     def Deserialize(self, dic):
         for key, value in dic.items():
-            self.__dict__[key] = value
+            if key == 'history':
+                self.__dict__[key] = [AttackHistory.Desrialize(m) for m in value]
+            else:
+                self.__dict__[key] = value
 
     def Revert(self, messageid):
         if (len(self.history) == 0): return None
 
         ret = self.history[-1]
-        if (ret['messageid'] == messageid):
+        if (ret.messageid == messageid):
             self.history.pop(-1)
-            self.boss = ret['bosscount']
+            self.boss = ret.bosscount
             return ret
         return None
 
@@ -2464,9 +2489,9 @@ class Clan():
 
             data = member.Revert(payload.message_id)
             if data is not None:
-                member.Attack(self, data['bosscount'])
-                if data['defeat']:
-                    boss = data['bosscount'] % BOSSNUMBER
+                member.Attack(self, data.bosscount)
+                if data.defeat:
+                    boss = data.bosscount % BOSSNUMBER
                     if boss in self.bossdead or len(self.bossdead) == 0:
                         self.UndefeatBoss(boss)
                         self.TemporaryMessage(self.inputchannel, '巻き戻しました\nボスが違うときは、defeat/undefeat/setbossで調整してください')
