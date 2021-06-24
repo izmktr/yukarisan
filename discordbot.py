@@ -78,6 +78,7 @@ from functools import cmp_to_key
 T = TypeVar('T') 
 
 BOSSNUMBER = len(BossName)
+MA_LAP = 3
 
 def sign(n : int):
     if n < 0 : return -1
@@ -638,31 +639,6 @@ class PartyInfomation:
                 des.__dict__[key] = value
         return des
 
-
-#討伐データ収集
-class DefeatData:
-    def __init__(self, defeattime, name):
-        self.defeattime = defeattime
-        self.name = name
-    
-    def Serialize(self):
-        ret = {}
-        ignore = []
-
-        for key, value in self.__dict__.items():
-            if not key in ignore:
-                ret[key] = value
-
-        return ret
-
-    @staticmethod
-    def Deserialize(dic):
-        result = DefeatData('', '')
-        for key, value in dic.items():
-            result.__dict__[key] = value
-        return result
-
-
 def Command(str, cmd):
     if (isinstance(cmd, list)):
         for c in cmd:
@@ -684,6 +660,7 @@ class AttackHistory():
         'defeat',
         'sotiecount',
         'memo'
+        'updatetime'
     ]
 
     def __init__(self, messageid, bosscount, overtime, defeat, sotiecount):
@@ -693,6 +670,10 @@ class AttackHistory():
         self.defeat = defeat
         self.sotiecount = sotiecount
         self.memo = ''
+        self.updatetime = ''
+
+    def TimeStamping(self):
+        self.updatetime = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
     @staticmethod
     def Desrialize(dic):
@@ -716,6 +697,7 @@ class ClanMember():
         self.name = ''
         self.taskkill = 0
         self.history : List[AttackHistory] = []
+        self.defeattimelist = []
         self.boss = 0
         self.notice = None
         self.mention = ''
@@ -725,8 +707,9 @@ class ClanMember():
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat, sotiecount):
-
-        self.history.append(AttackHistory(messageid, bosscount, overtime, defeat, sotiecount))
+        h = AttackHistory(messageid, bosscount, overtime, defeat, sotiecount)
+        h.TimeStamping()
+        self.history.append(h)
 
     def Attack(self, clan, bossindex):
         self.attack = True
@@ -767,8 +750,8 @@ class ClanMember():
     def SortieCount(self):
         count = 0
         for h in self.history:
-            if h.overtime == 0:
-                 count += 1
+            count += h.sotiecount
+
         if MAX_SORITE <= count:
             return MAX_SORITE
         return count
@@ -820,7 +803,7 @@ class ClanMember():
         self.attack = False
         self.reportlimit = None
         self.taskkill = 0
-        self.history = []
+        self.history.clear()
         self.notice = None
         self.gacha = 0
 
@@ -1262,7 +1245,6 @@ class Clan():
         self.lapAttackCount = []
         self.bossAttackCount = []
         self.defeatTime = []
-        self.attackTime = []
         self.namedelimiter = ''
         self.bossdead = set()
 
@@ -1275,6 +1257,7 @@ class Clan():
         self.admin = False
 
         self.outputlock = 0
+        self.lapplayer = 0
 
         self.commandlist = self.FuncMap()
 
@@ -1289,6 +1272,7 @@ class Clan():
             (['setboss'], self.SetBoss),
             (['notice', '通知'], self.Notice),
             (['reserve', '予約'], self.Reserve),
+            (['recruit', '募集'], self.Recruit),
             (['refresh'], self.Refresh),
             (['memberlist'], self.MemberList),
             (['channellist'], self.ChannelList),
@@ -1370,10 +1354,7 @@ class Clan():
         self.bossLap = 0
         self.beforesortie = 0
         self.bossdead = {}
-        self.lapAttackCount.clear()
-        self.bossAttackCount.clear()
         self.defeatTime.clear()
-        self.attackTime.clear()
         self.RouteReset()
 
     def Reset(self):
@@ -1425,9 +1406,6 @@ class Clan():
                     await message.remove_reaction(emoji, me)
                 except (discord.errors.NotFound, discord.errors.Forbidden):
                     break
-
-    async def Reserve(self, member : ClanMember, message : discord.Message, bossstr : str):
-        pass
 
     async def MemberRefresh(self):
         if self.guild is None: return
@@ -1639,6 +1617,33 @@ class Clan():
             self.TemporaryMessage(message.channel, '%d周目の通知を設定しました\n通知を消すときは「通知 0」と入力してください' % (member.notice + 1))
 
         return False
+    
+    async def Reserve(self, message, member : ClanMember, opt : str):
+        strarray = opt.split(' ')
+        
+        return True
+
+    async def Recruit(self, message, member : ClanMember, opt : str):
+        if opt == '':
+            bossdata = self.AliveBoss()
+        else:
+            bossdata = set()
+            for n in opt:
+                try:
+                    b = int(n) - 1
+                    bossdata.add(b)
+                except ValueError:
+                    pass
+            if len(bossdata) == 0 or 0 < len(bossdata - self.AliveBoss()):
+                await message.channel.send('ボスの数値が読み取れません')
+                return False
+
+        recruitmes = await message.channel.send('ボスを討伐する人はスタンプを押してください')
+
+        for stamp in bossdata:
+            await recruitmes.add_reaction(self.numbermarks[stamp + 1])
+
+        return False
 
     async def Refresh(self, message, member : ClanMember, opt):
         await self.MemberRefresh()
@@ -1787,8 +1792,8 @@ class Clan():
 
     async def AttackLog(self, message, member : ClanMember, opt):
         text = ''
-        for n in self.attackTime:
-            text += n + '\n'
+#        for n in self.attackTime:
+#            text += n + '\n'
 
         with StringIO(text) as bs:
             await message.channel.send(file=discord.File(bs, 'attacklog.txt'))
@@ -2379,22 +2384,10 @@ class Clan():
             for _i in range(count - l):
                 list.append(data)
 
-    def AddLapCount(self, lap : int):
-        count = sum([m.LapCount(lap) for m in self.members.values()])
-        self.FillList(self.lapAttackCount, lap + 1, count)
-        self.lapAttackCount[lap] = count
-
     def AddDefeatTime(self, count):
         now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         self.FillList(self.defeatTime, count + 1, now)
         self.defeatTime[count] = now
-
-    def AddAttackTime(self, count : float):
-        icount = int(count // 1)
-        now = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-        self.FillList(self.attackTime, icount + 1, now)
-        self.attackTime[icount] = now
-
     def BossCount(self, bossindex :int):
         return self.bossLap * BOSSNUMBER + bossindex
 
@@ -2426,7 +2419,6 @@ class Clan():
         boss = member.boss
 
         if idx == 0:
-            self.AddAttackTime(self.TotalSortie())
             member.Finish(self, payload.message_id)
             member.notice = None
 
@@ -2436,7 +2428,6 @@ class Clan():
             await self.damagecontrol[boss % BOSSNUMBER].Injure(member)
         
         if 1 <= idx and idx <= 8:
-            self.AddAttackTime(self.TotalSortie())
 
             if overkill:
                 member.Finish(self, payload.message_id, True, 0.5)
@@ -2523,13 +2514,25 @@ class Clan():
                 return lv - 1
         return 0
 
+    def UpdateLapPlayer(self) -> float:
+        lvup = self.GetLevelUpLap(self.bossLap)
+        length = lvup - self.bossLap
+        if length <= 0:
+            return 0
+        if MA_LAP < length:
+            length = MA_LAP
+        
+        baselap = self.lapAttackCount[self.bossLap - length - 1] if 0 <= self.bossLap - length - 1 else 0
+        self.lapplayer = (self.lapAttackCount[self.bossLap - 1] - baselap) / length
+        return self.lapplayer
+
     def LapAverage(self) -> float:
         lvup = self.GetLevelUpLap(self.bossLap)
         length = lvup - self.bossLap
         if length <= 0:
             return 0
-        if 3 < length:
-            length = 3
+        if MA_LAP < length:
+            length = MA_LAP
         
         baselap = self.lapAttackCount[self.bossLap - length - 1] if 0 <= self.bossLap - length - 1 else 0
         return (self.lapAttackCount[self.bossLap - 1] - baselap) / length
@@ -2675,7 +2678,7 @@ class Clan():
             'lapAttackCount' : self.lapAttackCount,
             'bossAttackCount' : self.bossAttackCount,
             'defeatTime' : self.defeatTime,
-            'attackTime' : self.attackTime,
+ 
             'namedelimiter' : self.namedelimiter,
             'admin' : self.admin,
             'bossdead' : list(self.bossdead),
@@ -2707,12 +2710,8 @@ class Clan():
 
             if 'bossAttackCount' in mdic:
                 clan.bossAttackCount = mdic['bossAttackCount']
-
             if 'defeatTime' in mdic:
                 clan.defeatTime = mdic['defeatTime']
-
-            if 'attackTime' in mdic:
-                clan.attackTime = mdic['attackTime']
 
             if 'admin' in mdic:
                 clan.admin = mdic['admin']
