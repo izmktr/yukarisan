@@ -23,8 +23,8 @@ LevelUpLap = [4, 11, 30, 30]
 BossHpData = [
     [   [600, 1.2], [800, 1.2], [1000, 1.3], [1200, 1.4], [1500, 1.5] ],
     [   [600, 1.6], [800, 1.6], [1000, 1.8], [1200, 1.9], [1500, 2.0] ],
-    [   [1000, 2.0], [1100, 2.0], [1600, 2.4], [1800, 2.4], [2200, 2.6] ],
-    [   [1800, 3.5], [1900, 3.5], [2200, 3.7], [2300, 3.8], [2600, 4.0] ],
+    [   [1200, 2.0], [1400, 2.0], [1700, 2.4], [1900, 2.4], [2200, 2.6] ],
+    [   [1800, 3.5], [1900, 3.5], [2300, 3.7], [2300, 3.8], [2700, 4.0] ],
     [   [8500, 3.5], [9000, 3.5], [9500, 3.7], [10000, 3.8], [11000, 4.0] ],
 ]
 
@@ -3364,7 +3364,7 @@ async def loop():
 
                 Outlog(ERRFILE, '%s flag:%s %s' % (clan.guild.name, resetflag, cstr))
             except Exception as e:
-                Outlog(ERRFILE, 'error: %s e.args:%s' % (clan.guild.name, e.args))
+                Outlog(ERRFILE, 'error: %s e.args:%s' % ((clan.guild.name if clan.guild is not None else 'Unknown'), e.args))
 
         for user in userhash.values():
             user.UsedClear()
