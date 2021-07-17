@@ -52,7 +52,8 @@ for l in BossHpData:
 
 GachaData = []
 
-from os.path import expanduser
+#from asyncio.windows_events import NULL
+#from os.path import expanduser
 from re import match, split
 from types import MemberDescriptorType
 import tokenkeycode
@@ -639,6 +640,7 @@ class PartyInfomation:
                 des.__dict__[key] = value
         return des
 
+alphamatch = re.compile('^[a-z]+')
 def Command(str, cmd):
     if (isinstance(cmd, list)):
         for c in cmd:
@@ -647,13 +649,23 @@ def Command(str, cmd):
                 return ret
         return None
 
-    length = len(cmd)
-    if (str[:length] == cmd):
-        return str[length:].strip()
+    if alphamatch.match(cmd):
+        result = alphamatch.match(str)
+        if result is None:
+            return None
+
+        if result.group(0) == cmd:
+            return str[len(cmd):].strip()
+    else:
+        length = len(cmd)
+        if (str[:length] == cmd):
+            return str[length:].strip()
+    
     return None
 
 class AttackHistory():
     keyarray = [
+        'attackcount',
         'messageid',
         'bosscount',
         'overtime',
@@ -663,7 +675,8 @@ class AttackHistory():
         'updatetime'
     ]
 
-    def __init__(self, messageid, bosscount, overtime, defeat, sotiecount):
+    def __init__(self, messageid, attackcount, bosscount, overtime, defeat, sotiecount):
+        self.attackcount = attackcount
         self.messageid = messageid
         self.bosscount = bosscount
         self.overtime = overtime
@@ -677,7 +690,7 @@ class AttackHistory():
 
     @staticmethod
     def Desrialize(dic):
-        history = AttackHistory(0, 0, 0, False, 0)
+        history = AttackHistory(0, 0, 0, 0, False, 0)
         for key in AttackHistory.keyarray:
             if key in dic:
                 history.__dict__[key] = dic[key]
@@ -707,15 +720,18 @@ class ClanMember():
         self.lastactive = datetime.datetime.now() + datetime.timedelta(days = -1)
 
     def CreateHistory(self, messageid, bosscount, overtime, defeat, sotiecount):
-        h = AttackHistory(messageid, bosscount, overtime, defeat, sotiecount)
+        h = AttackHistory(messageid, 0, bosscount, overtime, defeat, sotiecount)
         h.TimeStamping()
         self.history.append(h)
 
-    def Attack(self, clan, bossindex):
+    def Attack(self, clan, bossindex : int, first : bool):
         self.attack = True
         self.reportlimit = datetime.datetime.now() + datetime.timedelta(minutes = 30)
 
         self.boss = bossindex
+
+    def FirstAttackNum():
+        return 1
 
     def LapCount(self, lap : int):
         count = 0.0
@@ -1264,14 +1280,15 @@ class Clan():
     def FuncMap(self):
         return [
             (['a', '凸'], self.Attack),
+            (['c', '持'], self.ContinuesAttack),
             (['reload'], self.Reload),
             (['taskkill', 'タスキル'], self.TaskKill),
             (['memo', 'メモ'], self.Memo),
             (['defeat'], self.Defeat),
             (['undefeat'], self.Undefeat),
             (['setboss'], self.SetBoss),
-            (['notice', '通知'], self.Notice),
             (['reserve', '予約'], self.Reserve),
+            (['place', '配置'], self.Place),
             (['recruit', '募集'], self.Recruit),
             (['refresh'], self.Refresh),
             (['memberlist'], self.MemberList),
@@ -1472,7 +1489,7 @@ class Clan():
             if bidx < 0 or BOSSNUMBER <= bidx:
                 raise ValueError
         except ValueError:
-            await message.channel.send('凸1 のように発言してください')
+            await message.channel.send('凸5 のように発言してください')
             return False
 
         if bidx in self.bossdead:
@@ -1483,23 +1500,56 @@ class Clan():
 
         bosscount = self.bossLap * BOSSNUMBER + bidx
 
-        member.Attack(self, bosscount)
+        if member.FirstAttackNum() == 0:
+            await message.channel.send('新規凸がありません')
+            return False
 
-        if 2 <= self.AttackNum(bosscount):
-            damagecontrol = self.damagecontrol[bidx - 1]
-            if damagecontrol.IsAutoExecutive():
-                try:
-                    enemyhp = BossHpData[self.BossLevel() - 1][bidx][0]
-                    damagecontrol.RemainHp(enemyhp)
-                    await damagecontrol.TryDisplay()
-                except IndexError:
-                    pass
+        member.Attack(self, bosscount, True)
 
         if member.taskkill != 0:
             await message.add_reaction(self.taskkillmark)
 
         member.attackmessage = message
-        await self.AddReaction(message, member.IsOverkill())
+        await self.AddReaction(message, False)
+
+        if tmpattack is not None:
+            await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
+
+        return True
+
+    async def ContinuesAttack(self, message, member : ClanMember, opt):
+        if self.CheckInputChannel(message):
+            await message.channel.send('%s のチャンネルで発言してください' % inputchannel)
+            return False
+
+        try:
+            bidx = int(opt) - 1
+            if bidx < 0 or BOSSNUMBER <= bidx:
+                raise ValueError
+        except ValueError:
+            await message.channel.send('持51 のように発言してください')
+            return False
+
+        if bidx in self.bossdead:
+            await message.channel.send('%s は討伐済みです' % BossName[bidx])
+            return False
+
+        attacknum = 0
+        if member.RemainTime(attacknum) <= 0:
+            await message.channel.send('すでに凸済みです')
+            return False
+
+        tmpattack = member.attackmessage if member.attack else None
+
+        bosscount = self.bossLap * BOSSNUMBER + bidx
+
+        member.Attack(self, bosscount, False)
+
+        if member.taskkill != 0:
+            await message.add_reaction(self.taskkillmark)
+
+        member.attackmessage = message
+        await self.AddReaction(message, True)
 
         if tmpattack is not None:
             await self.RemoveReactionNotCancel(tmpattack, member.IsOverkill(), message.guild.me)
@@ -1620,7 +1670,22 @@ class Clan():
     
     async def Reserve(self, message, member : ClanMember, opt : str):
         strarray = opt.split(' ')
+
+        route = self.RouteAnalyze(strarray[0])
+
+        if 1 < len(strarray):
+            comment = strarray[1]
         
+        return True
+
+    async def Place(self, message, member : ClanMember, opt : str):
+        strarray = opt.split(' ')
+        
+        route = self.RouteAnalyze(strarray[0])
+
+        if 1 < len(strarray):
+            comment = strarray[1]
+
         return True
 
     async def Recruit(self, message, member : ClanMember, opt : str):
@@ -2288,6 +2353,17 @@ class Clan():
         if message.guild.me in message.mentions: return True
 
         return False
+
+    def RouteAnalyze(self, str : str):
+
+        if re.match('%d+\-%d+', str):
+            
+            return [1]
+        
+        if re.match('\++%d+', str):
+            return [1]
+
+        return None
 
     def SetOutputChannel(self):
         if self.outputchannel is None:
@@ -3502,7 +3578,7 @@ async def loop():
 
                 Outlog(ERRFILE, '%s flag:%s %s' % (clan.guild.name, resetflag, cstr))
             except Exception as e:
-                Outlog(ERRFILE, 'error: %s e.args:%s' % (clan.guild.name, e.args))
+                Outlog(ERRFILE, 'error: %s e.args:%s' % (clan.guild.name if clan.guild is not None else 'Unknown', e.args))
 
         for user in userhash.values():
             user.UsedClear()
