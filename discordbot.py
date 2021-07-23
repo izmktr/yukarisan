@@ -1578,13 +1578,18 @@ class Clan():
             return False
 
         newlap = self.DefeatBoss(bidx)
+        mention = self.CreateNotice(newlap, bidx)
+
+        if mention is not None:
+            await self.inputchannel.send('%s %d周目がやってきました' % (mention, newlap + 1))
+
         if newlap is not None:
             self.TemporaryMessage(message.channel, 'すべてのボスが倒されたので、%d周目に入りました' % (newlap + 1))
             mention = self.CreateNotice(newlap)
             if mention is not None:
                 await self.inputchannel.send('%s %d周目がやってきました' % (mention, newlap + 1))
-        else:
-            self.TemporaryMessage(message.channel, '%d:%s を討伐済みにしました' % (bidx + 1, BossName[bidx]))
+        
+        self.TemporaryMessage(message.channel, '%d:%s を討伐済みにしました' % (bidx + 1, BossName[bidx]))
 
         return True
 
